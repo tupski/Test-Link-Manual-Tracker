@@ -206,40 +206,36 @@ const Screens = (() => {
   };
 
   /**
-   * Generate teks laporan berformat untuk satu sesi.
+   * Generate teks laporan berformat per kategori dengan tab-alignment.
+   * Format per kategori:
+   *   Semua normal  → "CATNAME\t: Normal ✅"
+   *   Ada masalah   → "CATNAME\t: X Error, Y Diblokir, Z Normal"
+   *                   "\t- domain.com\tError ❌"
+   *                   "\t- domain2.com\tDiblokir 🚫"
+   *
    * @param {string} sessionName - 'pagi' | 'siang' | 'malam'
    * @param {string} provider    - nama provider user
    * @returns {Promise<string>}  - teks laporan siap kirim
    */
   const generateReport = async (sessionName, provider) => {
-    const today   = UI.todayWIB();
-    const cats    = await API.getCategories();
+    const today    = UI.todayWIB();
+    const cats     = await API.getCategories();
     const progress = await API.getProgress(today, sessionName);
-
     const sessNum  = { pagi: 1, siang: 2, malam: 3 };
     const num      = sessNum[sessionName] || 1;
 
-    // Waktu sekarang WIB sebagai waktu selesai test
-    const wibNow   = new Date(Date.now() + 7 * 3600000);
-    const tgl      = wibNow.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-    const jam      = String(wibNow.getUTCHours()).padStart(2, '0') + ':' + String(wibNow.getUTCMinutes()).padStart(2, '0');
-    const provText = provider || 'Tidak diketahui';
+    // Waktu WIB saat generate (= waktu selesai test)
+    const wibNow  = new Date(Date.now() + 7 * 3600000);
+    const tgl     = wibNow.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    const jam     = String(wibNow.getUTCHours()).padStart(2, '0') + ':' + String(wibNow.getUTCMinutes()).padStart(2, '0');
+    const prov    = provider || 'Tidak diketahui';
 
-    // Ambil semua link dari semua kategori (parallel)
+    // Ambil semua link paralel
     const linksMap = {};
-    await Promise.all(cats.map(async cat => {
-      linksMap[cat.id] = await API.getLinks(cat.id);
-    }));
+    await Promise.all(cats.map(async cat => { linksMap[cat.id] = await API.getLinks(cat.id); }));
 
-    // Map status ke teks + emoji
-    const statusLabel = { normal: 'Normal ✅', blocked: 'Diblokir 🚫', error_404: 'Error 404 ❌', opened: 'Dibuka (belum dikonfirmasi) 🔵' };
-
-    // Ekstrak nama domain sebagai identifier link (uppercase tanpa TLD)
-    const linkName = (url) => {
-      const domain = url.replace(/^https?:\/\//,'').split('/')[0];
-      const parts  = domain.split('.');
-      return (parts.length >= 2 ? parts[parts.length - 2] : domain).toUpperCase();
-    };
+    // Ambil domain dari URL untuk baris detail
+    const domainOf = (url) => url.replace(/^https?:\/\//, '').split('/')[0];
 
     let report = '';
     const sections = [
@@ -255,15 +251,46 @@ const Screens = (() => {
       report += `${sec.title} #${num}\n`;
       report += `Cache & Cookies cleared ✅\n\n`;
       report += `${tgl}, ${jam} WIB\n`;
-      report += `Provider: ${provText}\n\n`;
+      report += `Provider: ${prov}\n\n`;
 
       typeCats.forEach(cat => {
         const links = linksMap[cat.id] || [];
+        if (!links.length) return;
+
+        // Hitung status per link dalam kategori ini
+        let normalCount = 0, errorCount = 0, blockedCount = 0;
+        const problemLinks = [];
+
         links.forEach(link => {
           const prog   = progress.find(p => p.link_id === link.id);
-          const status = statusLabel[prog?.status] || 'Belum di-test ⬜';
-          report += `${linkName(link.url)} : ${status}\n`;
+          const status = prog?.status || 'none';
+          if (status === 'normal') {
+            normalCount++;
+          } else if (status === 'error_404') {
+            errorCount++;
+            problemLinks.push({ domain: domainOf(link.url), label: 'Error ❌' });
+          } else if (status === 'blocked') {
+            blockedCount++;
+            problemLinks.push({ domain: domainOf(link.url), label: 'Diblokir 🚫' });
+          } else {
+            // opened / belum dikonfirmasi — masuk problem juga
+            problemLinks.push({ domain: domainOf(link.url), label: 'Belum dikonfirmasi 🔵' });
+          }
         });
+
+        const catName = cat.name;
+        if (problemLinks.length === 0) {
+          // Semua normal — satu baris saja
+          report += `${catName}\t: Normal ✅\n`;
+        } else {
+          // Ada masalah — tampilkan ringkasan + detail
+          const summaryParts = [];
+          if (errorCount   > 0) summaryParts.push(`${errorCount} Error`);
+          if (blockedCount > 0) summaryParts.push(`${blockedCount} Diblokir`);
+          if (normalCount  > 0) summaryParts.push(`${normalCount} Normal`);
+          report += `${catName}\t: ${summaryParts.join(', ')}\n`;
+          problemLinks.forEach(pl => { report += `\t- ${pl.domain}\t${pl.label}\n`; });
+        }
       });
 
       report += '\n';

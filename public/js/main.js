@@ -418,6 +418,195 @@ const App = (() => {
     finally { UI.loading(false); }
   };
 
+  // ── Profile / User Settings ────────────────────────────────
+  /**
+   * Buka screen profil + isi data user.
+   */
+  const navToProfile = async () => {
+    const u = state.user;
+    if (!u) return;
+    // Isi info card
+    const av = document.getElementById('settings-avatar');
+    if (av) av.textContent = u.username.charAt(0).toUpperCase();
+    const unEl = document.getElementById('settings-username-display');
+    if (unEl) unEl.textContent = u.username;
+    const prEl = document.getElementById('settings-provider-display');
+    if (prEl) prEl.textContent = u.provider || 'Belum diset';
+    const roEl = document.getElementById('settings-role-display');
+    if (roEl) roEl.textContent = u.role === 'admin' ? '⚙️ Admin' : '👤 User';
+    // Pre-fill input username
+    const inp = document.getElementById('settings-new-username');
+    if (inp) inp.value = '';
+    // Isi dropdown provider dan pilih yang aktif
+    try {
+      const providers = await API.getProviders();
+      const sel = document.getElementById('settings-provider-select');
+      if (sel) {
+        sel.innerHTML = providers.map(p =>
+          `<option value="${p.name}" ${p.name === u.provider ? 'selected' : ''} class="bg-slate-900">${p.name}</option>`
+        ).join('');
+      }
+    } catch { /* abaikan */ }
+    showScreen('screen-user-settings');
+  };
+
+  /** Simpan username baru (PATCH /auth/me) */
+  const saveUsername = async () => {
+    const newName = document.getElementById('settings-new-username')?.value.trim();
+    if (!newName) return UI.toast('Username tidak boleh kosong!', 'error');
+    UI.loading(true);
+    try {
+      const res = await API.updateMe({ username: newName });
+      localStorage.setItem('lt_token', res.token);
+      state.user = res.user;
+      // Refresh tampilan
+      document.getElementById('settings-username-display').textContent = res.user.username;
+      document.getElementById('settings-new-username').value = '';
+      document.getElementById('dash-greeting').textContent = `${_greet()}, ${res.user.username}!`;
+      document.getElementById('dash-avatar').textContent   = res.user.username.charAt(0).toUpperCase();
+      UI.toast('Username berhasil diubah! ✅', 'success');
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  /** Simpan provider baru (PATCH /auth/me) */
+  const saveProvider = async () => {
+    const sel = document.getElementById('settings-provider-select');
+    const prov = sel?.value;
+    if (!prov) return UI.toast('Pilih provider terlebih dahulu!', 'error');
+    UI.loading(true);
+    try {
+      const res = await API.updateMe({ provider: prov });
+      localStorage.setItem('lt_token', res.token);
+      state.user = res.user;
+      document.getElementById('settings-provider-display').textContent = res.user.provider;
+      UI.toast('Provider berhasil diubah! ✅', 'success');
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  /** Helper: salam berdasarkan jam */
+  const _greet = () => {
+    const h = new Date().getHours();
+    return h < 12 ? 'Selamat Pagi' : h < 17 ? 'Selamat Siang' : 'Selamat Malam';
+  };
+
+  /**
+   * Reset SEMUA progress hari ini dengan konfirmasi math soal.
+   */
+  const resetAllProgress = async () => {
+    const a = Math.floor(Math.random() * 9) + 1;
+    const b = Math.floor(Math.random() * 9) + 1;
+    const jawaban = await UI.inputModal(
+      '⚠️ Konfirmasi Reset',
+      `Jawab soal ini untuk melanjutkan reset:\n${a} + ${b} = ?`
+    );
+    if (jawaban === null || jawaban === undefined) return;
+    if (parseInt(jawaban, 10) !== a + b)
+      return UI.toast('Jawaban salah! Reset dibatalkan.', 'error');
+    UI.loading(true);
+    try {
+      const today = UI.todayWIB();
+      // Reset semua sesi hari ini
+      for (const sess of ['pagi', 'siang', 'malam']) {
+        await API.resetProgress({ session_name: sess, date: today }).catch(() => {});
+      }
+      UI.toast('Semua progress hari ini direset! 🔄', 'info');
+      Screens.renderDashboard().catch(() => {});
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  // ── Admin: Edit User ───────────────────────────────────────
+  /**
+   * Admin: buka modal edit username/provider user tertentu.
+   */
+  const adminEditUser = async (id, currentUsername, currentProvider) => {
+    const newUsername = await UI.inputModal('Edit Username', 'Username baru (kosongkan jika tidak diubah):', currentUsername);
+    if (newUsername === null) return; // Cancel
+    const providers = await API.getProviders().catch(() => []);
+    const provList  = providers.map(p => p.name).join(', ') || '';
+    const newProvider = await UI.inputModal('Edit Provider', `Provider baru (pilih: ${provList})`, currentProvider);
+    if (newProvider === null) return; // Cancel
+
+    const data = {};
+    if (newUsername.trim() && newUsername.trim() !== currentUsername) data.username = newUsername.trim();
+    if (newProvider.trim() && newProvider.trim() !== currentProvider) data.provider = newProvider.trim();
+    if (!Object.keys(data).length) return UI.toast('Tidak ada perubahan.', 'info');
+
+    UI.loading(true);
+    try {
+      await API.adminUpdateUser(id, data);
+      UI.toast('User berhasil diupdate! ✅', 'success');
+      await Admin.renderUsers();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  // ── Admin: App Config ──────────────────────────────────────
+  /** Admin: simpan konfigurasi tampilan app */
+  const adminSaveAppConfig = async () => {
+    const name   = document.getElementById('admin-app-name')?.value.trim();
+    const slogan = document.getElementById('admin-app-slogan')?.value.trim();
+    const icon   = document.getElementById('admin-app-icon')?.value.trim();
+    const data   = {};
+    if (name)   data.app_name   = name;
+    if (slogan) data.app_slogan = slogan;
+    if (icon)   data.app_icon   = icon;
+    if (!Object.keys(data).length) return UI.toast('Isi minimal satu field!', 'error');
+    UI.loading(true);
+    try {
+      await API.updateAppConfig(data);
+      UI.toast('Konfigurasi aplikasi disimpan! ✅', 'success');
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  // ── PWA Install Prompt ─────────────────────────────────────
+  let _deferredInstallPrompt = null;
+
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    _deferredInstallPrompt = e;
+    const banner = document.getElementById('pwa-install-banner');
+    if (banner) banner.classList.remove('hidden');
+  });
+
+  const installPWA = async () => {
+    if (!_deferredInstallPrompt) return;
+    _deferredInstallPrompt.prompt();
+    const { outcome } = await _deferredInstallPrompt.userChoice;
+    _deferredInstallPrompt = null;
+    document.getElementById('pwa-install-banner')?.classList.add('hidden');
+    if (outcome === 'accepted') UI.toast('Aplikasi berhasil diinstall! 🎉', 'success');
+  };
+
+  const dismissInstall = () => {
+    _deferredInstallPrompt = null;
+    document.getElementById('pwa-install-banner')?.classList.add('hidden');
+  };
+
+  // ── Double-back to Exit (PWA) ──────────────────────────────
+  let _backPressedOnce = false;
+  window.addEventListener('popstate', (e) => {
+    // Jika ada riwayat screen internal → goBack
+    if (state.screenHistory.length > 1) {
+      e.preventDefault();
+      goBack();
+      history.pushState(null, '', location.href); // tetap di URL yang sama
+      return;
+    }
+    // Di halaman utama (dashboard / login) — double-back untuk keluar
+    if (_backPressedOnce) return; // biarkan keluar
+    e.preventDefault();
+    _backPressedOnce = true;
+    UI.toast('Tekan back sekali lagi untuk keluar', 'info');
+    history.pushState(null, '', location.href);
+    setTimeout(() => { _backPressedOnce = false; }, 2000);
+  });
+  // Tambahkan entry awal agar popstate terpicu
+  history.pushState(null, '', location.href);
+
   // ── Report Actions ─────────────────────────────────────────
   /** Tampilkan modal laporan — dipanggil dari tombol Kirim Laporan */
   const kirimLaporan = async () => {
@@ -444,15 +633,31 @@ const App = (() => {
     } catch { UI.toast('Gagal menyalin. Salin manual dari kotak teks.', 'error'); }
   };
 
-  const shareReport = () => {
+  /**
+   * Kirim laporan via Signal Messenger.
+   * Signal mendukung deep link: https://signal.me/#p/<nomor>
+   * Karena tidak ada API Signal publik, kita buka Signal share URL.
+   */
+  const shareSignal = () => {
     const text = document.getElementById('report-text').value;
+    // Coba pakai Web Share API (mobile) yang biasanya muncul pilihan Signal
     if (navigator.share) {
-      navigator.share({ title: 'Laporan Test Link', text }).catch(() => {});
+      navigator.share({ title: 'Laporan Test Link', text }).catch(() => {
+        // Fallback jika user batalkan
+        _fallbackCopyAndHint(text);
+      });
     } else {
-      // Fallback ke WhatsApp Web
-      const url = 'https://wa.me/?text=' + encodeURIComponent(text);
-      window.open(url, '_blank');
+      // Desktop: salin ke clipboard dan beri petunjuk
+      _fallbackCopyAndHint(text);
     }
+  };
+
+  const _fallbackCopyAndHint = (text) => {
+    navigator.clipboard.writeText(text).then(() => {
+      UI.toast('Laporan disalin! Buka Signal dan paste ke chat. 📋', 'info');
+    }).catch(() => {
+      UI.toast('Salin teks laporan secara manual, lalu kirim via Signal.', 'info');
+    });
   };
 
   // ── Refresh dropdown provider di halaman login ─────────────
@@ -477,7 +682,8 @@ const App = (() => {
       'screen-admin-sessions':      () => Admin.renderSessions(),
       'screen-admin-notifications': () => Admin.renderNotifications(),
       'screen-admin-users':         () => Admin.renderUsers(),
-      'screen-admin-providers':     () => Admin.renderProviders()
+      'screen-admin-providers':     () => Admin.renderProviders(),
+      'screen-admin-app':           () => Admin.renderAppConfig()
     };
     if (loaders[id]) loaders[id]().catch(e => UI.toast(e.message,'error')).finally(() => UI.loading(false));
     else UI.loading(false);
@@ -510,11 +716,14 @@ const App = (() => {
   return {
     login, logout, toggleAdminLogin, goBack, showScreen: _showScreenWithLoad,
     openSession, openCategory, openLink, reportStatus, closeStatusModal, markAllDone, resetCategory,
-    navTo, navToSession, navToAdmin,
+    navTo, navToSession, navToAdmin, navToProfile,
+    saveUsername, saveProvider, resetAllProgress,
     adminAddCategory, adminRenameCategory, adminDeleteCategory, adminEditLinks, adminSaveLinks,
-    adminSaveSession, adminAddNotif, adminToggleNotif, adminDeleteNotif, adminDeleteUser,
+    adminSaveSession, adminAddNotif, adminToggleNotif, adminDeleteNotif,
+    adminDeleteUser, adminEditUser, adminSaveAppConfig,
     adminAddProvider, adminDeleteProvider, adminCycleType,
-    kirimLaporan, closeReportModal, copyReport, shareReport,
+    installPWA, dismissInstall,
+    kirimLaporan, closeReportModal, copyReport, shareSignal,
     closeConfirm: UI?.closeConfirm, closeInputModal: UI?.closeInputModal
   };
 })();

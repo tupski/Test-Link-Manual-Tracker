@@ -10,18 +10,20 @@ const router  = express.Router();
 
 const { requireAuth, requireAdmin } = require('../middleware/auth');
 
-const { login, me }                        = require('../controllers/authController');
+const { login, me, updateMe }              = require('../controllers/authController');
 const { getCategories, createCategory, renameCategory, deleteCategory } = require('../controllers/categoriesController');
 const { getLinks, saveLinks, deleteLink }   = require('../controllers/linksController');
 const { getProgress, markOpened, updateStatus, markAllOpened, resetProgress } = require('../controllers/progressController');
-const { getUsers, deleteUser }             = require('../controllers/usersController');
-const { getSessions, updateSession }       = require('../controllers/configController');
+const { getUsers, updateUser, deleteUser }  = require('../controllers/usersController');
+const { getSessions, updateSession }        = require('../controllers/configController');
 const { getNotifications, getAllNotifications, createNotification, updateNotification, deleteNotification } = require('../controllers/notificationsController');
 const { getProviders, createProvider, deleteProvider } = require('../controllers/providersController');
+const { getAppConfig, updateAppConfig }     = require('../controllers/appConfigController');
 
 // ── Auth ─────────────────────────────────────────────────────────────
 router.post('/auth/login', login);
 router.get('/auth/me',     requireAuth, me);
+router.patch('/auth/me',    requireAuth, updateMe);
 
 // ── Kategori ──────────────────────────────────────────────────────────
 router.get('/categories',            requireAuth, getCategories);
@@ -43,6 +45,7 @@ router.delete('/progress',           requireAuth, resetProgress);
 
 // ── Users (admin) ─────────────────────────────────────────────────────
 router.get('/users',                 requireAuth, requireAdmin, getUsers);
+router.patch('/users/:id',           requireAuth, requireAdmin, updateUser);
 router.delete('/users/:id',          requireAuth, requireAdmin, deleteUser);
 
 // ── Konfigurasi sesi ──────────────────────────────────────────────────
@@ -61,5 +64,9 @@ router.delete('/notifications/:id',  requireAuth, requireAdmin, deleteNotificati
 router.get('/providers',             getProviders);
 router.post('/providers',            requireAuth, requireAdmin, createProvider);
 router.delete('/providers/:id',      requireAuth, requireAdmin, deleteProvider);
+
+// ── Config Aplikasi (publik GET, admin PATCH) ─────────────────────────
+router.get('/config/app',            getAppConfig);
+router.patch('/config/app',          requireAuth, requireAdmin, updateAppConfig);
 
 module.exports = router;

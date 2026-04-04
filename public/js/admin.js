@@ -108,22 +108,58 @@ const Admin = (() => {
       </div>`).join('') || '<p class="text-center text-slate-500 text-sm py-8">Belum ada notifikasi.</p>';
   };
 
-  /** Render daftar user */
+  /** Render daftar user (dengan provider + tombol edit) */
   const renderUsers = async () => {
     const users = await API.getUsers();
     document.getElementById('users-count').textContent = `${users.length} user`;
     document.getElementById('admin-users-list').innerHTML = users.map(u => `
-      <div class="glass rounded-xl p-4 flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-gradient-to-br ${u.role==='admin'?'from-rose-500 to-pink-600':'from-indigo-500 to-purple-600'} flex items-center justify-center text-sm font-bold shrink-0">
-          ${u.username.charAt(0).toUpperCase()}
+      <div class="glass rounded-xl p-4">
+        <div class="flex items-center gap-3 mb-2">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br ${u.role==='admin'?'from-rose-500 to-pink-600':'from-indigo-500 to-purple-600'} flex items-center justify-center text-sm font-bold shrink-0">
+            ${u.username.charAt(0).toUpperCase()}
+          </div>
+          <div class="flex-1 min-w-0">
+            <p class="font-semibold text-sm truncate">${u.username} ${u.role==='admin'?'<span class="text-xs text-rose-400 font-bold">ADMIN</span>':''}</p>
+            <p class="text-xs text-slate-400">${u.provider || 'Provider belum diset'} · Terakhir: ${u.last_seen ? UI.formatDate(u.last_seen) : '-'}</p>
+          </div>
         </div>
-        <div class="flex-1 min-w-0">
-          <p class="font-semibold text-sm truncate">${u.username} ${u.role==='admin'?'<span class="text-xs text-rose-400 font-bold">ADMIN</span>':''}</p>
-          <p class="text-xs text-slate-400">Terakhir: ${u.last_seen ? UI.formatDate(u.last_seen) : '-'}</p>
+        <div class="flex gap-2 mt-2">
+          <button onclick="App.adminEditUser('${u.id}', '${u.username}', '${u.provider||''}')"
+            class="flex-1 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold active:scale-95">✏️ Edit</button>
+          ${u.role !== 'admin' ? `<button onclick="App.adminDeleteUser('${u.id}', '${u.username}', this)"
+            class="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold active:scale-95">🗑</button>` : ''}
         </div>
-        ${u.role !== 'admin' ? `<button onclick="App.adminDeleteUser('${u.id}', '${u.username}', this)"
-          class="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold active:scale-95">Hapus</button>` : ''}
       </div>`).join('');
+  };
+
+  /** Render form konfigurasi tampilan aplikasi (admin) */
+  const renderAppConfig = async () => {
+    try {
+      const configs = await API.getAppConfig();
+      const cfg     = Object.fromEntries(configs.map(c => [c.key, c.value]));
+      const nameEl   = document.getElementById('admin-app-name');
+      const sloganEl = document.getElementById('admin-app-slogan');
+      const iconEl   = document.getElementById('admin-app-icon');
+      if (nameEl)   nameEl.value   = cfg.app_name   || '';
+      if (sloganEl) sloganEl.value = cfg.app_slogan || '';
+      if (iconEl)   iconEl.value   = cfg.app_icon   || '';
+      // Tampilkan preview
+      _updateAppPreview(cfg.app_name, cfg.app_slogan, cfg.app_icon);
+      // Live preview saat mengetik
+      if (nameEl)   nameEl.oninput   = () => _updateAppPreview(nameEl.value, sloganEl?.value, iconEl?.value);
+      if (sloganEl) sloganEl.oninput = () => _updateAppPreview(nameEl?.value, sloganEl.value, iconEl?.value);
+      if (iconEl)   iconEl.oninput   = () => _updateAppPreview(nameEl?.value, sloganEl?.value, iconEl.value);
+    } catch (e) { /* abaikan */ }
+  };
+
+  /** Update elemen preview di screen-admin-app */
+  const _updateAppPreview = (name, slogan, icon) => {
+    const n = document.getElementById('preview-name');
+    const s = document.getElementById('preview-slogan');
+    const i = document.getElementById('preview-icon');
+    if (n) n.textContent = name   || 'Nama App';
+    if (s) s.textContent = slogan || 'Slogan app...';
+    if (i) i.textContent = icon   || '🔗';
   };
 
   /** Render daftar provider internet (admin) */
@@ -139,5 +175,5 @@ const Admin = (() => {
       </div>`).join('') || '<p class="text-center text-slate-500 text-sm py-8">Belum ada provider.</p>';
   };
 
-  return { renderCategories, renderLinkEdit, updateLinkCounter, renderSessions, renderNotifications, renderUsers, renderProviders };
+  return { renderCategories, renderLinkEdit, updateLinkCounter, renderSessions, renderNotifications, renderUsers, renderProviders, renderAppConfig };
 })();

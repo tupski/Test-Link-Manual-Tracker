@@ -26,6 +26,16 @@
 </head>
 <body class="text-white font-sans antialiased">
 
+<!-- ══════════════════════════════════════════════ PWA INSTALL BANNER -->
+<div id="pwa-install-banner" class="hidden fixed top-0 left-0 right-0 z-[70] px-4 py-2.5 bg-indigo-900/95 backdrop-blur-sm border-b border-indigo-700/50 safe-top">
+  <div class="max-w-md mx-auto flex items-center gap-3">
+    <span class="text-xl">📲</span>
+    <p class="text-xs text-indigo-100 flex-1"><strong id="pwa-banner-name">Test Link Tracker</strong> — Install di perangkat ini!</p>
+    <button onclick="App.installPWA()" class="px-3 py-1.5 bg-indigo-500 rounded-lg text-white text-xs font-bold active:scale-95 shrink-0">Install</button>
+    <button onclick="App.dismissInstall()" class="text-indigo-300 text-xl leading-none shrink-0">✕</button>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════════ TOAST -->
 <div id="toast" class="fixed top-5 left-1/2 -translate-x-1/2 z-[100] pointer-events-none">
   <div id="toast-text" class="hidden px-5 py-3 rounded-2xl text-sm font-semibold shadow-2xl glass slide-up whitespace-nowrap"></div>
@@ -59,15 +69,17 @@
 <!-- ══════════════════════════════════════════════ MODAL: LAPORAN -->
 <div id="modal-report" class="fixed inset-0 z-[90] hidden items-start justify-center bg-black/60 backdrop-blur-sm px-4 py-8 overflow-y-auto" onclick="App.closeReportModal(event)">
   <div class="glass rounded-3xl w-full max-w-lg p-5 slide-up" onclick="event.stopPropagation()">
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-1">
       <h3 class="text-base font-bold">📋 Laporan Test Link</h3>
       <button onclick="App.closeReportModal()" class="text-slate-500 text-xl leading-none">✕</button>
     </div>
-    <textarea id="report-text" readonly rows="14"
-      class="w-full bg-slate-900/80 border border-slate-700 rounded-2xl px-4 py-3 text-white text-xs font-mono resize-none outline-none mb-4"></textarea>
-    <div class="flex gap-3">
-      <button onclick="App.copyReport()" class="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm active:scale-95 transition-all">📋 Salin</button>
-      <button onclick="App.shareReport()" class="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm active:scale-95 transition-all">📤 Bagikan</button>
+    <p class="text-xs text-slate-500 mb-3">Laporan bisa diedit sebelum dikirim. Tap teks untuk mulai edit.</p>
+    <textarea id="report-text" rows="16" spellcheck="false"
+      class="w-full bg-slate-900/80 border border-slate-700 rounded-2xl px-4 py-3 text-white text-xs font-mono outline-none focus:border-indigo-500 transition-colors mb-4"
+      style="resize:vertical;min-height:200px;tab-size:4"></textarea>
+    <div class="grid grid-cols-2 gap-3">
+      <button onclick="App.copyReport()" class="py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm active:scale-95 transition-all">📋 Salin</button>
+      <button onclick="App.shareSignal()" class="py-3 rounded-xl bg-[#3a76f0] text-white font-bold text-sm active:scale-95 transition-all">📡 Signal</button>
     </div>
   </div>
 </div>
@@ -225,6 +237,9 @@
     <button onclick="App.showScreen('screen-admin-providers')" class="glass rounded-2xl p-5 text-left active:scale-95 transition-all">
       <div class="text-2xl mb-2">📡</div><div class="font-bold text-sm">Provider</div><div class="text-slate-400 text-xs mt-0.5">Kelola provider</div>
     </button>
+    <button onclick="App.showScreen('screen-admin-app')" class="glass rounded-2xl p-5 text-left active:scale-95 transition-all">
+      <div class="text-2xl mb-2">🎨</div><div class="font-bold text-sm">Tampilan App</div><div class="text-slate-400 text-xs mt-0.5">Nama, slogan, ikon</div>
+    </button>
   </div>
 </div>
 
@@ -298,22 +313,103 @@
 </div>
 
 <!-- ══════════════════════════════════════════════ BOTTOM NAV -->
-<nav id="bottom-nav" class="hidden fixed bottom-4 left-0 right-0 px-4 z-50">
-  <div class="glass rounded-2xl p-1.5 flex items-center justify-around max-w-md mx-auto shadow-2xl">
-    <button data-nav="home" onclick="App.navTo('home')" class="nav-btn flex flex-col items-center gap-0.5 px-5 py-2 rounded-xl transition-all">
+<nav id="bottom-nav" class="hidden fixed bottom-0 left-0 right-0 z-50 pb-safe">
+  <div class="glass border-t border-white/5 px-2 py-2 flex items-center justify-around max-w-md mx-auto">
+    <button data-nav="home" onclick="App.navTo('home')"
+      class="nav-btn flex flex-col items-center gap-0.5 flex-1 py-2 rounded-xl transition-all active:scale-95">
       <span class="text-xl">🏠</span><span class="text-[10px] font-semibold text-slate-400">Beranda</span>
     </button>
-    <button data-nav="session" onclick="App.navToSession()" class="nav-btn flex flex-col items-center gap-0.5 px-5 py-2 rounded-xl transition-all">
+    <button data-nav="session" onclick="App.navToSession()"
+      class="nav-btn flex flex-col items-center gap-0.5 flex-1 py-2 rounded-xl transition-all active:scale-95">
       <span class="text-xl">📋</span><span class="text-[10px] font-semibold text-slate-400">Sesi</span>
     </button>
-    <button data-nav="admin" onclick="App.navToAdmin()" id="nav-admin-btn" class="nav-btn hidden flex-col items-center gap-0.5 px-5 py-2 rounded-xl transition-all">
+    <button data-nav="admin" onclick="App.navToAdmin()" id="nav-admin-btn"
+      class="nav-btn hidden flex-col items-center gap-0.5 flex-1 py-2 rounded-xl transition-all active:scale-95">
       <span class="text-xl">⚙️</span><span class="text-[10px] font-semibold text-slate-400">Admin</span>
     </button>
-    <button onclick="App.logout()" class="nav-btn flex flex-col items-center gap-0.5 px-5 py-2 rounded-xl transition-all">
-      <span class="text-xl">👤</span><span class="text-[10px] font-semibold text-slate-400">Keluar</span>
+    <button data-nav="profile" onclick="App.navToProfile()"
+      class="nav-btn flex flex-col items-center gap-0.5 flex-1 py-2 rounded-xl transition-all active:scale-95">
+      <span class="text-xl">👤</span><span class="text-[10px] font-semibold text-slate-400">Profil</span>
     </button>
   </div>
 </nav>
+
+<!-- ══════════════════════════════════════════════ SCREEN: USER SETTINGS -->
+<div id="screen-user-settings" class="screen gradient-bg pb-32">
+  <div class="glass px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
+    <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-300">‹</button>
+    <h2 class="text-base font-bold flex-1">Profil & Pengaturan</h2>
+  </div>
+  <!-- Info user -->
+  <div class="px-5 pt-5 pb-2">
+    <div class="glass rounded-2xl p-5 text-center">
+      <div class="w-16 h-16 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-2xl font-bold mx-auto mb-3" id="settings-avatar"></div>
+      <p class="font-bold text-lg" id="settings-username-display"></p>
+      <p class="text-slate-400 text-sm mt-0.5" id="settings-provider-display"></p>
+      <span class="inline-block mt-2 text-xs px-2 py-0.5 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 font-semibold" id="settings-role-display"></span>
+    </div>
+  </div>
+  <!-- Ganti username -->
+  <div class="px-5 pt-3 space-y-3">
+    <div class="glass rounded-2xl p-4">
+      <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Ganti Username</p>
+      <input id="settings-new-username" type="text" placeholder="Username baru..."
+        class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors text-sm mb-3"/>
+      <button onclick="App.saveUsername()" class="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm active:scale-95 transition-all">Simpan Username</button>
+    </div>
+    <!-- Ganti provider -->
+    <div class="glass rounded-2xl p-4">
+      <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Ganti Provider</p>
+      <select id="settings-provider-select"
+        class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500 transition-colors text-sm mb-3 appearance-none cursor-pointer">
+      </select>
+      <button onclick="App.saveProvider()" class="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm active:scale-95 transition-all">Simpan Provider</button>
+    </div>
+    <!-- Danger zone -->
+    <div class="glass rounded-2xl p-4 border border-rose-500/20">
+      <p class="text-xs font-bold text-rose-400 uppercase tracking-wider mb-3">⚠️ Danger Zone</p>
+      <button onclick="App.resetAllProgress()" class="w-full py-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 font-bold text-sm active:scale-95 transition-all mb-3">🔄 Reset Semua Progress Hari Ini</button>
+      <button onclick="App.logout()" class="w-full py-3 rounded-xl bg-slate-800/80 text-slate-300 font-semibold text-sm active:scale-95 transition-all">👋 Keluar dari Akun</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCREEN: ADMIN APP CONFIG -->
+<div id="screen-admin-app" class="screen gradient-bg pb-28">
+  <div class="glass px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
+    <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-300">‹</button>
+    <h2 class="text-base font-bold flex-1">Tampilan Aplikasi</h2>
+  </div>
+  <div class="px-5 pt-4 space-y-4">
+    <div class="glass rounded-2xl p-5 space-y-4">
+      <div>
+        <label class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Nama Aplikasi PWA</label>
+        <input id="admin-app-name" type="text" placeholder="Contoh: Test Link Tracker"
+          class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors text-sm"/>
+      </div>
+      <div>
+        <label class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Slogan Halaman Login</label>
+        <input id="admin-app-slogan" type="text" placeholder="Contoh: Test Link Manual ga bakal kelewat!"
+          class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors text-sm"/>
+      </div>
+      <div>
+        <label class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">Ikon Aplikasi (Emoji atau URL Gambar)</label>
+        <input id="admin-app-icon" type="text" placeholder="Contoh: 🔗 atau https://..."
+          class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors text-sm mb-1"/>
+        <p class="text-[10px] text-slate-500">Gunakan emoji atau URL gambar PNG/SVG (min 512×512 untuk PWA).</p>
+      </div>
+      <button onclick="App.adminSaveAppConfig()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold active:scale-95 transition-all">💾 Simpan Perubahan</button>
+    </div>
+    <div class="glass rounded-2xl p-4">
+      <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Preview</p>
+      <div class="text-center">
+        <div id="preview-icon" class="w-16 h-16 mx-auto mb-2 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-3xl shadow-lg"></div>
+        <p class="font-black text-xl" id="preview-name"></p>
+        <p class="text-slate-400 text-xs mt-1" id="preview-slogan"></p>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ══════════════════════════════════════════════ SCRIPTS -->
 <script src="/js/api.js"></script>

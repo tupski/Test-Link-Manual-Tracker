@@ -88,4 +88,45 @@ const me = async (req, res, next) => {
   }
 };
 
-module.exports = { login, me };
+/**
+ * PATCH /api/auth/me
+ * Update username dan/atau provider user yang sedang login.
+ * Mengembalikan JWT baru dengan data terbaru.
+ */
+const updateMe = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { username, provider } = req.body;
+
+    const updates = { last_seen: new Date().toISOString() };
+
+    if (username?.trim()) {
+      const uname = username.trim().toLowerCase();
+      // Larang admin ganti username
+      if (req.user.role === 'admin' && uname !== 'admin')
+        return res.status(400).json({ error: 'Username admin tidak bisa diubah.' });
+      // Cek duplikat
+      const { data: exists } = await supabase
+        .from('users').select('id').eq('username', uname).neq('id', userId).maybeSingle();
+      if (exists) return res.status(409).json({ error: 'Username sudah digunakan.' });
+      updates.username = uname;
+    }
+
+    if (provider?.trim()) updates.provider = provider.trim();
+
+    const { data: user, error } = await supabase
+      .from('users').update(updates).eq('id', userId).select().single();
+
+    if (error) return next(error);
+
+    // Buat token baru dengan data yang diperbarui
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role, provider: user.provider },
+      JWT_SECRET, { expiresIn: JWT_EXPIRES }
+    );
+
+    res.json({ token, user: { id: user.id, username: user.username, role: user.role, provider: user.provider } });
+  } catch (err) { next(err); }
+};
+
+module.exports = { login, me, updateMe };
