@@ -20,6 +20,7 @@ const getCategories = async (req, res, next) => {
 
     const result = data.map(c => ({
       id: c.id, name: c.name, type: c.type || 'manual',
+      group_name: c.group_name || 'Situs',
       sort_order: c.sort_order, links_updated_at: c.links_updated_at,
       link_count: c.links[0]?.count ?? 0
     }));
@@ -51,17 +52,19 @@ const createCategory = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-/** PATCH /api/categories/:id — rename atau update type kategori (admin) */
+/** PATCH /api/categories/:id — rename, update type, atau group_name (admin) */
 const renameCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name, type } = req.body;
+    const { name, type, group_name } = req.body;
 
     const updates = {};
     if (name?.trim()) updates.name = name.trim();
 
     const allowed = ['otomatis', 'utama', 'manual'];
     if (type && allowed.includes(type)) updates.type = type;
+
+    if (group_name?.trim()) updates.group_name = group_name.trim();
 
     if (!Object.keys(updates).length)
       return res.status(400).json({ error: 'Tidak ada field yang diupdate.' });
@@ -89,3 +92,4 @@ const deleteCategory = async (req, res, next) => {
 };
 
 module.exports = { getCategories, createCategory, renameCategory, deleteCategory };
+

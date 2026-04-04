@@ -70,22 +70,24 @@ const API = (() => {
     deleteNotification:  (id)     => req('DELETE',`/notifications/${id}`),
 
     // ── Users (admin) ────────────────────────────────────────
-    getUsers:       ()            => req('GET',   '/users'),
-    adminUpdateUser:(id, data)    => req('PATCH', `/users/${id}`, data),
-    deleteUser:     (id)          => req('DELETE',`/users/${id}`),
+    getUsers:           ()           => req('GET',   '/users'),
+    adminUpdateUser:    (id, data)   => req('PATCH', `/users/${id}`, data),
+    toggleResetAllowed: (id, allowed)=> req('PATCH', `/users/${id}/reset-allowed`, { allowed }),
+    deleteUser:         (id)         => req('DELETE',`/users/${id}`),
 
     // ── Auth: update profil sendiri ───────────────────────────
-    updateMe: (data)              => req('PATCH', '/auth/me', data),
+    updateMe: (data)                 => req('PATCH', '/auth/me', data),
 
     // ── Providers (GET publik, tidak butuh auth) ──────────────
     getProviders: () => fetch(BASE + '/providers')
       .then(r => r.json())
       .then(d => { if (d.error) throw new Error(d.error); return d; }),
-    addProvider:    (name)        => req('POST',  '/providers', { name }),
-    deleteProvider: (id)          => req('DELETE',`/providers/${id}`),
+    addProvider:    (name)           => req('POST',  '/providers', { name }),
+    deleteProvider: (id)             => req('DELETE',`/providers/${id}`),
 
-    // ── Kategori: update type ─────────────────────────────────
-    setCategoryType: (id, type)   => req('PATCH', `/categories/${id}`, { type }),
+    // ── Kategori: update type / group_name ───────────────────
+    setCategoryType:  (id, type)      => req('PATCH', `/categories/${id}`, { type }),
+    setCategoryGroup: (id, group_name)=> req('PATCH', `/categories/${id}`, { group_name }),
 
     // ── App Config (GET publik, PATCH admin) ──────────────────
     getAppConfig: () => fetch(BASE + '/config/app')

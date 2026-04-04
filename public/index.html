@@ -147,19 +147,78 @@
   </div>
 </div>
 
-<!-- ══════════════════════════════════════════════ SCREEN: DASHBOARD -->
-<div id="screen-dashboard" class="screen gradient-bg pb-24">
-  <div class="px-5 pt-6 pb-4">
-    <div class="flex items-center justify-between mb-1">
-      <div><p class="text-slate-400 text-xs" id="dash-date"></p><h2 class="text-xl font-bold" id="dash-greeting"></h2></div>
-      <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-lg font-bold" id="dash-avatar"></div>
+<!-- ══════════════════════════════════════════════ SCREEN: BERANDA -->
+<div id="screen-dashboard" class="screen gradient-bg pb-24 overflow-x-hidden">
+  <!-- Weather + Header -->
+  <div id="weather-header" class="relative overflow-hidden">
+    <canvas id="weather-canvas" class="absolute inset-0 w-full h-full pointer-events-none opacity-60"></canvas>
+    <div id="weather-bg-overlay" class="absolute inset-0 transition-all duration-1000"></div>
+    <div class="relative z-10 px-5 pt-8 pb-6">
+      <div class="flex items-start justify-between">
+        <div>
+          <p class="text-slate-300/80 text-xs font-medium" id="dash-date"></p>
+          <h2 class="text-2xl font-black mt-0.5" id="dash-greeting"></h2>
+          <p class="text-4xl font-black font-mono mt-2 tabular-nums" id="dash-clock">--:--</p>
+          <p class="text-slate-300/70 text-xs mt-1" id="dash-date-full"></p>
+        </div>
+        <div id="weather-icon" class="text-5xl select-none" style="filter:drop-shadow(0 4px 12px rgba(0,0,0,.4))"></div>
+      </div>
     </div>
   </div>
-  <div id="notif-banner" class="hidden mx-5 mb-4 p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+  <!-- Countdown ke test berikutnya -->
+  <div class="px-5 -mt-2 mb-3">
+    <div class="glass rounded-2xl p-4 border border-indigo-500/20">
+      <div class="flex items-center justify-between">
+        <div>
+          <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Test Berikutnya</p>
+          <p class="text-sm font-bold text-indigo-300 mt-0.5" id="next-test-label">Menghitung...</p>
+        </div>
+        <div class="text-right">
+          <p class="text-2xl font-black font-mono tabular-nums text-white" id="next-test-countdown">--:--:--</p>
+          <p class="text-[10px] text-slate-500" id="next-test-sub"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Tombol Aktifkan Notifikasi (jika belum aktif) -->
+  <div id="notif-permission-wrap" class="hidden px-5 mb-3">
+    <button onclick="App.requestNotification()" class="w-full py-3 rounded-2xl glass border border-amber-500/30 text-amber-300 text-sm font-bold active:scale-95 transition-all flex items-center justify-center gap-2">
+      <span>🔔</span><span>Aktifkan Notifikasi Jadwal Test</span>
+    </button>
+  </div>
+  <!-- Banner notifikasi admin -->
+  <div id="notif-banner" class="hidden mx-5 mb-3 p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
     <div id="notif-content" class="text-sm"></div>
   </div>
-  <div class="px-5 mb-4">
-    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Sesi Hari Ini</p>
+  <!-- Statistik hari ini -->
+  <div class="px-5 mb-3">
+    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Statistik Hari Ini</p>
+    <div class="grid grid-cols-3 gap-2" id="dash-stats-grid">
+      <!-- dirender oleh screens.js -->
+    </div>
+  </div>
+  <!-- Perubahan Link -->
+  <div class="px-5 pb-4">
+    <div class="flex items-center justify-between mb-2">
+      <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Update Link</p>
+      <button onclick="App.showLinkChanges()" class="text-xs text-indigo-400 font-semibold active:scale-95">Selengkapnya →</button>
+    </div>
+    <div class="glass rounded-2xl p-4" id="dash-changes-list">
+      <!-- dirender oleh screens.js -->
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCREEN: TEST LINK (session cards) -->
+<div id="screen-testlink" class="screen gradient-bg pb-24">
+  <div class="px-5 pt-6 pb-3">
+    <h2 class="text-xl font-bold">Test Link</h2>
+    <p class="text-slate-400 text-xs mt-0.5">Pilih sesi untuk mulai test</p>
+  </div>
+  <div id="notif-banner-tl" class="hidden mx-5 mb-4 p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+    <div id="notif-content-tl" class="text-sm"></div>
+  </div>
+  <div class="px-5">
     <div id="session-cards" class="space-y-3"></div>
   </div>
 </div>
@@ -312,6 +371,44 @@
   <div id="admin-users-list" class="px-5 pt-4 space-y-2"></div>
 </div>
 
+<!-- ══════════════════════════════════════════════ PROFILE BOTTOM DRAWER -->
+<div id="profile-drawer-overlay" class="hidden fixed inset-0 z-[60] bg-black/50 backdrop-blur-sm" onclick="App.closeProfileDrawer()"></div>
+<div id="profile-drawer" class="hidden fixed bottom-0 left-0 right-0 z-[61] max-w-md mx-auto">
+  <div class="glass rounded-t-3xl px-5 pt-5 pb-8 border-t border-white/10">
+    <!-- Handle bar -->
+    <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-5"></div>
+    <!-- User info -->
+    <div class="flex items-center gap-4 mb-5 p-4 bg-slate-800/60 rounded-2xl">
+      <div class="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xl font-bold shrink-0" id="drawer-avatar"></div>
+      <div class="flex-1 min-w-0">
+        <p class="font-bold truncate" id="drawer-username"></p>
+        <p class="text-xs text-slate-400 truncate" id="drawer-provider"></p>
+        <span class="text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-400 font-bold" id="drawer-role"></span>
+      </div>
+    </div>
+    <!-- Menu items -->
+    <div class="space-y-2">
+      <button onclick="App.openSettings()" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl glass active:scale-95 transition-all text-left">
+        <span class="text-xl">⚙️</span>
+        <div class="flex-1"><p class="font-semibold text-sm">Pengaturan Akun</p><p class="text-xs text-slate-400">Ubah username & provider</p></div>
+        <span class="text-slate-500">›</span>
+      </button>
+      <button id="drawer-reset-btn" onclick="App.resetAllProgress()" class="hidden w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 active:scale-95 transition-all text-left">
+        <span class="text-xl">🔄</span>
+        <div class="flex-1"><p class="font-semibold text-sm text-amber-300">Reset Progress</p><p class="text-xs text-slate-400">Reset semua progress hari ini</p></div>
+      </button>
+      <button onclick="App.deleteAccount()" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-rose-500/5 border border-rose-500/20 active:scale-95 transition-all text-left">
+        <span class="text-xl">🗑️</span>
+        <div class="flex-1"><p class="font-semibold text-sm text-rose-400">Hapus Akun</p><p class="text-xs text-slate-400">Akun dan data progress dihapus</p></div>
+      </button>
+      <button onclick="App.logout()" class="w-full flex items-center gap-3 px-4 py-3.5 rounded-xl bg-slate-800/80 active:scale-95 transition-all text-left">
+        <span class="text-xl">👋</span>
+        <div class="flex-1"><p class="font-semibold text-sm">Keluar</p><p class="text-xs text-slate-400">Logout dari akun ini</p></div>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════════ BOTTOM NAV -->
 <nav id="bottom-nav" class="hidden fixed bottom-0 left-0 right-0 z-50 pb-safe">
   <div class="glass border-t border-white/5 px-2 py-2 flex items-center justify-around max-w-md mx-auto">
@@ -319,9 +416,9 @@
       class="nav-btn flex flex-col items-center gap-0.5 flex-1 py-2 rounded-xl transition-all active:scale-95">
       <span class="text-xl">🏠</span><span class="text-[10px] font-semibold text-slate-400">Beranda</span>
     </button>
-    <button data-nav="session" onclick="App.navToSession()"
+    <button data-nav="testlink" onclick="App.navToTestLink()"
       class="nav-btn flex flex-col items-center gap-0.5 flex-1 py-2 rounded-xl transition-all active:scale-95">
-      <span class="text-xl">📋</span><span class="text-[10px] font-semibold text-slate-400">Sesi</span>
+      <span class="text-xl">🔗</span><span class="text-[10px] font-semibold text-slate-400">Test Link</span>
     </button>
     <button data-nav="admin" onclick="App.navToAdmin()" id="nav-admin-btn"
       class="nav-btn hidden flex-col items-center gap-0.5 flex-1 py-2 rounded-xl transition-all active:scale-95">
@@ -338,38 +435,31 @@
 <div id="screen-user-settings" class="screen gradient-bg pb-32">
   <div class="glass px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
     <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-300">‹</button>
-    <h2 class="text-base font-bold flex-1">Profil & Pengaturan</h2>
+    <h2 class="text-base font-bold flex-1">Pengaturan Akun</h2>
   </div>
-  <!-- Info user -->
-  <div class="px-5 pt-5 pb-2">
-    <div class="glass rounded-2xl p-5 text-center">
-      <div class="w-16 h-16 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-2xl font-bold mx-auto mb-3" id="settings-avatar"></div>
-      <p class="font-bold text-lg" id="settings-username-display"></p>
-      <p class="text-slate-400 text-sm mt-0.5" id="settings-provider-display"></p>
-      <span class="inline-block mt-2 text-xs px-2 py-0.5 rounded-lg bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 font-semibold" id="settings-role-display"></span>
+  <div class="px-5 pt-4 pb-2">
+    <div class="glass rounded-2xl p-5 flex items-center gap-4">
+      <div class="w-14 h-14 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-2xl font-bold shrink-0" id="settings-avatar"></div>
+      <div>
+        <p class="font-bold" id="settings-username-display"></p>
+        <p class="text-slate-400 text-sm" id="settings-provider-display"></p>
+        <span class="inline-block mt-1 text-[10px] px-2 py-0.5 rounded-md bg-indigo-500/20 text-indigo-400 font-bold" id="settings-role-display"></span>
+      </div>
     </div>
   </div>
-  <!-- Ganti username -->
-  <div class="px-5 pt-3 space-y-3">
+  <div class="px-5 pt-2 space-y-3">
     <div class="glass rounded-2xl p-4">
       <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Ganti Username</p>
       <input id="settings-new-username" type="text" placeholder="Username baru..."
         class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors text-sm mb-3"/>
       <button onclick="App.saveUsername()" class="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm active:scale-95 transition-all">Simpan Username</button>
     </div>
-    <!-- Ganti provider -->
     <div class="glass rounded-2xl p-4">
       <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Ganti Provider</p>
       <select id="settings-provider-select"
         class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-white outline-none focus:border-indigo-500 transition-colors text-sm mb-3 appearance-none cursor-pointer">
       </select>
       <button onclick="App.saveProvider()" class="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm active:scale-95 transition-all">Simpan Provider</button>
-    </div>
-    <!-- Danger zone -->
-    <div class="glass rounded-2xl p-4 border border-rose-500/20">
-      <p class="text-xs font-bold text-rose-400 uppercase tracking-wider mb-3">⚠️ Danger Zone</p>
-      <button onclick="App.resetAllProgress()" class="w-full py-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 font-bold text-sm active:scale-95 transition-all mb-3">🔄 Reset Semua Progress Hari Ini</button>
-      <button onclick="App.logout()" class="w-full py-3 rounded-xl bg-slate-800/80 text-slate-300 font-semibold text-sm active:scale-95 transition-all">👋 Keluar dari Akun</button>
     </div>
   </div>
 </div>

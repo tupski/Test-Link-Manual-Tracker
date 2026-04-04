@@ -1,28 +1,37 @@
 /**
  * public/js/screens.js
- * Render semua screen: dashboard, kategori (grouped by type), links.
- * v3.1 — Support type kategori, Kirim Laporan, provider.
+ * Render semua screen: beranda (dashboard), test link (session cards),
+ * kategori (grouped by type + group_name), links, laporan.
+ * v4.0 — Beranda info, countdown, stats, weather; Test Link terpisah.
  */
 
 const Screens = (() => {
 
-  // ── Helper: label per tipe kategori ──────────────────────────────────
+  // ── Helper: metadata per tipe kategori ───────────────────────────────
   const TYPE_META = {
-    otomatis: { label: '🤖 Test Link Otomatis', color: 'text-indigo-400',  border: 'border-indigo-500/30', bg: 'bg-indigo-500/5'  },
-    utama:    { label: '⭐ Test Link Utama Manual', color: 'text-amber-400', border: 'border-amber-500/30',  bg: 'bg-amber-500/5'   },
-    manual:   { label: '🔗 Test Link Manual',    color: 'text-slate-300',  border: 'border-slate-600/40',  bg: 'bg-slate-800/30'  }
+    otomatis: { label: '🤖 Test Link Otomatis',    color: 'text-indigo-400',  border: 'border-indigo-500/30', bg: 'bg-indigo-500/5'  },
+    utama:    { label: '⭐ Test Link Utama Manual', color: 'text-amber-400',   border: 'border-amber-500/30',  bg: 'bg-amber-500/5'   },
+    manual:   { label: '🔗 Test Link Manual',       color: 'text-slate-300',   border: 'border-slate-600/40',  bg: 'bg-slate-800/30'  }
   };
 
-  /** Render kartu sesi di dashboard dengan breakdown per tipe */
-  const renderDashboard = async () => {
-    const sessions  = await API.getSessions();
-    const today     = UI.todayWIB();
-    const progress  = await API.getProgress(today);
-    const cats      = await API.getCategories();
-    const notifs    = await API.getNotifications();
-    const container = document.getElementById('session-cards');
+  // ── Stat card helper ──────────────────────────────────────────────────
+  const _statCard = (label, value, color) =>
+    `<div class="glass rounded-xl p-3 text-center">
+      <p class="text-xl font-black ${color}">${value}</p>
+      <p class="text-[9px] font-semibold text-slate-500 mt-0.5 leading-tight">${label}</p>
+    </div>`;
 
-    // Notifikasi
+  /**
+   * Render BERANDA — info lengkap: stats, update link.
+   * Weather & countdown dikelola oleh main.js (setInterval).
+   */
+  const renderDashboard = async () => {
+    const today    = UI.todayWIB();
+    const cats     = await API.getCategories();
+    const progress = await API.getProgress(today); // semua sesi
+    const notifs   = await API.getNotifications();
+
+    // Notifikasi admin
     const banner = document.getElementById('notif-banner');
     if (notifs.length) {
       banner.classList.remove('hidden');
@@ -31,14 +40,77 @@ const Screens = (() => {
       ).join('<hr class="border-indigo-500/20 my-2"/>');
     } else { banner.classList.add('hidden'); }
 
+    // ── Hitung statistik ──────────────────────────────────────────────
+    const totalLinks   = cats.reduce((a, c) => a + Number(c.link_count), 0);
+    const progMap      = {};
+    progress.forEach(p => { if (!progMap[p.link_id] || p.status !== 'opened') progMap[p.link_id] = p.status; });
+
+    const countNormal  = Object.values(progMap).filter(s => s === 'normal').length;
+    const countError   = Object.values(progMap).filter(s => s === 'error_404').length;
+    const countBlocked = Object.values(progMap).filter(s => s === 'blocked').length;
+    const countOpened  = Object.values(progMap).filter(s => s === 'opened').length;
+    // countDone = countNormal + countError + countBlocked; // (untuk future use)
+    const countUntouched = totalLinks - Object.keys(progMap).length;
+
+    document.getElementById('dash-stats-grid').innerHTML = [
+      _statCard('Total Link',    totalLinks,           'text-slate-200'),
+      _statCard('✅ Normal',      countNormal,          'text-emerald-400'),
+      _statCard('❌ Error',       countError,           'text-amber-400'),
+      _statCard('🚫 Diblokir',    countBlocked,         'text-rose-400'),
+      _statCard('🔵 Dibuka',      countOpened,          'text-indigo-400'),
+      _statCard('⬜ Belum Buka',  countUntouched,       'text-slate-500'),
+    ].join('');
+
+    // ── Update link terbaru ───────────────────────────────────────────
+    const sorted = [...cats].filter(c => c.links_updated_at).sort((a, b) =>
+      new Date(b.links_updated_at) - new Date(a.links_updated_at));
+    const changeEl = document.getElementById('dash-changes-list');
+    if (sorted.length) {
+      changeEl.innerHTML = sorted.slice(0, 5).map(c =>
+        `<div class="flex items-center justify-between py-2 border-b border-slate-800/60 last:border-0">
+          <span class="text-sm font-semibold truncate flex-1">${c.name}</span>
+          <span class="text-xs text-slate-500 shrink-0 ml-2">${UI.formatDate(c.links_updated_at)}</span>
+          <span class="text-xs text-indigo-400 font-mono ml-2 shrink-0">${c.link_count} link</span>
+        </div>`
+      ).join('');
+    } else {
+      changeEl.innerHTML = '<p class="text-center text-slate-500 text-xs py-2">Belum ada data update link.</p>';
+    }
+  };
+
+  /**
+   * Render TEST LINK screen — kartu sesi (Pagi/Siang/Malam) + progress per tipe.
+   */
+  const renderTestLink = async () => {
+    const sessions  = await API.getSessions();
+    const today     = UI.todayWIB();
+    const progress  = await API.getProgress(today);
+    const cats      = await API.getCategories();
+    const notifs    = await API.getNotifications();
+    const container = document.getElementById('session-cards');
+
+    // Notifikasi di test link banner
+    const banner = document.getElementById('notif-banner-tl');
+    if (notifs.length) {
+      banner.classList.remove('hidden');
+      document.getElementById('notif-content-tl').innerHTML = notifs.map(n =>
+        `<p class="font-semibold">${n.title}</p>${n.message ? `<p class="text-slate-400 text-xs mt-0.5">${n.message}</p>` : ''}`
+      ).join('<hr class="border-indigo-500/20 my-2"/>');
+    } else { banner.classList.add('hidden'); }
+
     // Badge status sesi
     const badgeFor = (timer) => {
-      const cls = { active:'bg-emerald-500/20 text-emerald-400 border-emerald-500/30', overtime:'bg-amber-500/20 text-amber-400 border-amber-500/30', expired:'bg-slate-700 text-slate-500 border-slate-600', waiting:'bg-slate-700 text-slate-400 border-slate-600' };
+      const cls = {
+        active:   'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+        overtime: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+        expired:  'bg-slate-700 text-slate-500 border-slate-600',
+        waiting:  'bg-slate-700 text-slate-400 border-slate-600'
+      };
       return `<span class="text-[10px] font-bold px-2 py-0.5 rounded-lg border ${cls[timer.status] || cls.waiting}">${timer.label}</span>`;
     };
 
-    // Mini progress bar per tipe untuk tiap sesi
-    const typeRow = (type, sessProg, cats) => {
+    // Mini progress bar per tipe
+    const typeRow = (type, sessProg) => {
       const typeCats   = cats.filter(c => c.type === type);
       const totalLinks = typeCats.reduce((a, c) => a + Number(c.link_count), 0);
       if (!totalLinks) return '';
@@ -60,28 +132,32 @@ const Screens = (() => {
       const totalLinks = cats.reduce((a, c) => a + Number(c.link_count), 0);
       const doneLinks  = sessProg.length;
       const pct        = totalLinks ? Math.round(doneLinks / totalLinks * 100) : 0;
+      const sessEmoji  = { pagi: '🌅', siang: '☀️', malam: '🌙' }[s.session_name] || '🕐';
       const sessLabel  = s.session_name.charAt(0).toUpperCase() + s.session_name.slice(1);
       const startLabel = UI.formatTime(s.start_hour, s.start_minute);
 
       return `<div class="glass rounded-2xl p-5 active:scale-[.98] transition-all cursor-pointer" onclick="App.openSession('${s.session_name}')">
         <div class="flex items-start justify-between mb-3">
-          <div><h3 class="font-bold text-base">${sessLabel}</h3><p class="text-slate-400 text-xs mt-0.5">${startLabel} WIB</p></div>
+          <div class="flex items-center gap-3">
+            <span class="text-2xl">${sessEmoji}</span>
+            <div><h3 class="font-bold text-base">${sessLabel}</h3><p class="text-slate-400 text-xs mt-0.5">${startLabel} WIB</p></div>
+          </div>
           ${badgeFor(timer)}
         </div>
-        ${typeRow('otomatis', sessProg, cats)}
-        ${typeRow('utama', sessProg, cats)}
-        ${typeRow('manual', sessProg, cats)}
+        ${typeRow('otomatis', sessProg)}
+        ${typeRow('utama', sessProg)}
+        ${typeRow('manual', sessProg)}
         <div class="flex justify-between text-xs text-slate-500 mt-2 mb-1">
-          <span>Total: ${doneLinks}/${totalLinks}</span><span>${pct}%</span>
+          <span>${doneLinks}/${totalLinks} link</span><span>${pct}%</span>
         </div>
         <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-          <div class="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full progress-bar" style="width:${pct}%"></div>
+          <div class="h-full ${pct===100?'bg-emerald-500':'bg-gradient-to-r from-indigo-500 to-purple-500'} rounded-full progress-bar" style="width:${pct}%"></div>
         </div>
       </div>`;
     }).join('');
   };
 
-  /** Render daftar kategori untuk satu sesi — dikelompokkan per tipe */
+  /** Render daftar kategori untuk satu sesi — dikelompokkan per tipe → per group_name */
   const renderCategories = async (sessionName) => {
     const today    = UI.todayWIB();
     const cats     = await API.getCategories();
@@ -90,7 +166,7 @@ const Screens = (() => {
     const sess     = sessions.find(s => s.session_name === sessionName) || {};
 
     // Update header sesi
-    document.getElementById('cat-session-label').textContent = 'Sesi';
+    document.getElementById('cat-session-label').textContent = 'Test Link';
     document.getElementById('cat-session-title').textContent = sessionName.charAt(0).toUpperCase() + sessionName.slice(1);
     const timer   = UI.sessionTimer(sess.start_hour, sess.start_minute, sess.normal_hours, sess.max_hours);
     const timerEl = document.getElementById('cat-timer');
@@ -125,16 +201,27 @@ const Screens = (() => {
       </div>`;
     };
 
-    // Render dengan section header per tipe
+    // Render per tipe → per group_name
     const container = document.getElementById('category-list');
     let html = '';
     ['otomatis', 'utama', 'manual'].forEach(type => {
       const typeCats = cats.filter(c => c.type === type);
       if (!typeCats.length) return;
       const meta = TYPE_META[type];
+      // Kelompokkan lagi berdasarkan group_name
+      const groups = [...new Set(typeCats.map(c => c.group_name || 'Situs'))];
+      let groupsHtml = '';
+      groups.forEach(grp => {
+        const grpCats = typeCats.filter(c => (c.group_name || 'Situs') === grp);
+        groupsHtml += `
+          <div class="mb-2">
+            <p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-1.5 px-1">${grp}</p>
+            <div class="space-y-2">${grpCats.map(catCard).join('')}</div>
+          </div>`;
+      });
       html += `<div class="pt-3 pb-1">
         <p class="text-xs font-bold ${meta.color} uppercase tracking-wider mb-2 px-1">${meta.label}</p>
-        <div class="space-y-2">${typeCats.map(catCard).join('')}</div>
+        ${groupsHtml}
       </div>`;
     });
     container.innerHTML = html || '<p class="text-center text-slate-500 text-sm py-10">Belum ada kategori.</p>';
@@ -299,5 +386,5 @@ const Screens = (() => {
     return report.trim();
   };
 
-  return { renderDashboard, renderCategories, renderLinks, generateReport };
+  return { renderDashboard, renderTestLink, renderCategories, renderLinks, generateReport };
 })();

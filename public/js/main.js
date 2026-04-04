@@ -98,18 +98,164 @@ const App = (() => {
     showScreen('screen-login', false);
   };
 
+  // ── Weather Animation ─────────────────────────────────────
+  /**
+   * Tentukan tema cuaca + salam berdasarkan jam WIB.
+   * @param {number} h - jam (0-23)
+   */
+  const _getWeatherTheme = (h) => {
+    if (h >= 5  && h < 7)  return { key: 'dawn',      icon: '🌅', grad: 'linear-gradient(160deg,#4c1d95,#7c3aed,#f97316)', greet: 'Selamat Pagi' };
+    if (h >= 7  && h < 11) return { key: 'morning',   icon: '☀️', grad: 'linear-gradient(160deg,#1e3a5f,#2563eb,#0ea5e9)', greet: 'Selamat Pagi' };
+    if (h >= 11 && h < 15) return { key: 'midday',    icon: '🌤️', grad: 'linear-gradient(160deg,#0369a1,#0ea5e9,#38bdf8)', greet: 'Selamat Siang' };
+    if (h >= 15 && h < 19) return { key: 'afternoon', icon: '🌇', grad: 'linear-gradient(160deg,#7c3aed,#b45309,#f97316)', greet: 'Selamat Sore' };
+    return { key: 'night', icon: '🌙', grad: 'linear-gradient(160deg,#020617,#0f172a,#1e1b4b)', greet: 'Selamat Malam' };
+  };
+
+  /** Update tampilan weather header di beranda */
+  const _updateWeatherHeader = () => {
+    const wibH   = new Date(Date.now() + 7 * 3600000).getUTCHours();
+    const wibMin = new Date(Date.now() + 7 * 3600000).getUTCMinutes();
+    const wibSec = new Date(Date.now() + 7 * 3600000).getUTCSeconds();
+    const theme  = _getWeatherTheme(wibH);
+    const now    = new Date(Date.now() + 7 * 3600000);
+
+    // Gradient bg
+    const overlay = document.getElementById('weather-bg-overlay');
+    if (overlay) overlay.style.background = theme.grad;
+
+    // Icon cuaca
+    const iconEl = document.getElementById('weather-icon');
+    if (iconEl) iconEl.textContent = theme.icon;
+
+    // Greeting + nama user
+    const grEl = document.getElementById('dash-greeting');
+    if (grEl && state.user) grEl.textContent = `${theme.greet}, ${state.user.username}!`;
+
+    // Jam berjalan
+    const clockEl = document.getElementById('dash-clock');
+    if (clockEl) clockEl.textContent =
+      `${String(wibH).padStart(2,'0')}:${String(wibMin).padStart(2,'0')}:${String(wibSec).padStart(2,'0')}`;
+
+    // Tanggal
+    const dateEl = document.getElementById('dash-date');
+    if (dateEl) dateEl.textContent = now.toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric', timeZone:'UTC' });
+  };
+
+  // ── Countdown & Notification Scheduling ───────────────────
+  let _countdownInterval = null;
+  let _notifScheduled    = false;
+
+  /** Hitung sesi berikutnya berdasarkan jam WIB sekarang */
+  const _getNextSession = (sessions) => {
+    const wibNow   = new Date(Date.now() + 7 * 3600000);
+    const wibH     = wibNow.getUTCHours();
+    const wibM     = wibNow.getUTCMinutes();
+    const nowMins  = wibH * 60 + wibM;
+
+    // Urutkan sesi berdasarkan start time
+    const sorted = [...sessions].sort((a, b) =>
+      (a.start_hour * 60 + a.start_minute) - (b.start_hour * 60 + b.start_minute)
+    );
+
+    // Cari sesi yang belum mulai
+    for (const s of sorted) {
+      const startMins = s.start_hour * 60 + s.start_minute;
+      if (startMins > nowMins) {
+        const diffSecs = (startMins - nowMins) * 60 - wibNow.getUTCSeconds();
+        return { session: s, diffSecs, tomorrow: false };
+      }
+    }
+    // Semua sesi sudah lewat — hitung hingga sesi pertama besok
+    const first     = sorted[0];
+    const startMins = first.start_hour * 60 + first.start_minute;
+    const diffSecs  = (1440 - nowMins + startMins) * 60 - wibNow.getUTCSeconds();
+    return { session: first, diffSecs, tomorrow: true };
+  };
+
+  /** Update elemen countdown di beranda */
+  const _tickCountdown = (sessions) => {
+    const { session, diffSecs, tomorrow } = _getNextSession(sessions);
+    const h  = Math.floor(diffSecs / 3600);
+    const m  = Math.floor((diffSecs % 3600) / 60);
+    const s  = diffSecs % 60;
+    const lbl = document.getElementById('next-test-label');
+    const cd  = document.getElementById('next-test-countdown');
+    const sub = document.getElementById('next-test-sub');
+    if (lbl) lbl.textContent = `Sesi ${session.session_name.charAt(0).toUpperCase() + session.session_name.slice(1)} — ${UI.formatTime(session.start_hour, session.start_minute)} WIB`;
+    if (cd)  cd.textContent  = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    if (sub) sub.textContent = tomorrow ? 'besok' : 'hari ini';
+  };
+
+  /** Mulai interval untuk clock + countdown */
+  const _startLiveClock = async () => {
+    if (_countdownInterval) clearInterval(_countdownInterval);
+    let sessions = [];
+    try { sessions = await API.getSessions(); } catch { /* abaikan */ }
+    _updateWeatherHeader();
+    if (sessions.length) _tickCountdown(sessions);
+    _countdownInterval = setInterval(() => {
+      _updateWeatherHeader();
+      if (sessions.length) _tickCountdown(sessions);
+    }, 1000);
+  };
+
+  /** Minta izin notifikasi dari browser */
+  const requestNotification = async () => {
+    if (!('Notification' in window)) return UI.toast('Browser tidak mendukung notifikasi.', 'error');
+    const perm = await Notification.requestPermission();
+    if (perm === 'granted') {
+      document.getElementById('notif-permission-wrap')?.classList.add('hidden');
+      UI.toast('Notifikasi berhasil diaktifkan! 🔔', 'success');
+      _scheduleNotifications();
+    } else {
+      UI.toast('Izin notifikasi ditolak.', 'error');
+    }
+  };
+
+  /** Jadwalkan notifikasi untuk sesi hari ini */
+  const _scheduleNotifications = async () => {
+    if (_notifScheduled) return;
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    _notifScheduled = true;
+    let sessions = [];
+    try { sessions = await API.getSessions(); } catch { return; }
+
+    sessions.forEach(s => {
+      const wibNow   = new Date(Date.now() + 7 * 3600000);
+      const nowSecs  = wibNow.getUTCHours() * 3600 + wibNow.getUTCMinutes() * 60 + wibNow.getUTCSeconds();
+      const startSec = s.start_hour * 3600 + s.start_minute * 60;
+      const normEnd  = startSec + s.normal_hours * 3600;
+      const maxEnd   = startSec + s.max_hours   * 3600;
+      const alerts   = [
+        { at: startSec - 300, msg: `5 menit lagi Test Link sesi ${s.session_name} dimulai! 🔗` },
+        { at: normEnd  - 300, msg: `5 menit lagi batas normal sesi ${s.session_name} habis! ⏰` },
+        { at: maxEnd   - 300, msg: `5 menit lagi batas maksimal sesi ${s.session_name} habis! ⚠️` }
+      ];
+      alerts.forEach(a => {
+        const delay = (a.at - nowSecs) * 1000;
+        if (delay > 0) setTimeout(() => new Notification('Test Link Tracker', { body: a.msg, icon: '/icons/icon-192.png' }), delay);
+      });
+    });
+  };
+
+  /** Cek apakah notif perlu ditampilkan bannernya */
+  const _checkNotifPermission = () => {
+    const wrap = document.getElementById('notif-permission-wrap');
+    if (!wrap) return;
+    if (!('Notification' in window) || Notification.permission === 'granted') {
+      wrap.classList.add('hidden');
+      if (Notification.permission === 'granted') _scheduleNotifications();
+    } else {
+      wrap.classList.remove('hidden');
+    }
+  };
+
   /**
    * Dipanggil setelah login berhasil atau token valid saat init.
    * @param {boolean} restore - true jika restore dari localStorage (refresh halaman)
    */
   const afterLogin = (restore = false) => {
     const u = state.user;
-    // Update greeting
-    const hour = new Date().getHours();
-    const greet = hour < 12 ? 'Selamat Pagi' : hour < 17 ? 'Selamat Siang' : 'Selamat Malam';
-    document.getElementById('dash-greeting').textContent = `${greet}, ${u.username}!`;
-    document.getElementById('dash-date').textContent = new Date().toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-    document.getElementById('dash-avatar').textContent = u.username.charAt(0).toUpperCase();
     // Tampilkan tombol admin di nav jika admin
     if (u.role === 'admin') document.getElementById('nav-admin-btn').style.display = 'flex';
     else document.getElementById('nav-admin-btn').style.display = 'none';
@@ -118,19 +264,20 @@ const App = (() => {
     // Daftarkan service worker
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 
+    // Mulai live clock + countdown
+    _startLiveClock();
+    _checkNotifPermission();
+
     if (restore) {
-      // Kembalikan ke screen terakhir sebelum refresh
       const savedScreen  = localStorage.getItem('lt_screen')   || 'screen-dashboard';
       const savedSession = localStorage.getItem('lt_session')  || null;
       const savedCatId   = localStorage.getItem('lt_cat_id')   || null;
       const savedCatName = localStorage.getItem('lt_cat_name') || null;
-
       state.currentSession  = savedSession;
       state.currentCatId    = savedCatId;
       state.currentCatName  = savedCatName;
       state.screenHistory   = ['screen-dashboard'];
 
-      // Navigasi ke screen yang tersimpan
       if (savedScreen === 'screen-links' && savedCatId) {
         showScreen('screen-links', false);
         state.screenHistory.push('screen-categories');
@@ -146,12 +293,18 @@ const App = (() => {
         Screens.renderCategories(savedSession)
           .catch(e => { UI.toast(e.message, 'error'); showScreen('screen-dashboard', false); loadDashboard(); })
           .finally(() => UI.loading(false));
+      } else if (savedScreen === 'screen-testlink') {
+        state.screenHistory.push('screen-testlink');
+        showScreen('screen-testlink', false);
+        UI.loading(true);
+        Screens.renderTestLink()
+          .catch(() => { showScreen('screen-dashboard', false); loadDashboard(); })
+          .finally(() => UI.loading(false));
       } else {
         showScreen('screen-dashboard', false);
         loadDashboard();
       }
     } else {
-      // Login baru — selalu ke dashboard
       state.screenHistory = ['screen-dashboard'];
       showScreen('screen-dashboard', false);
       loadDashboard();
@@ -164,6 +317,131 @@ const App = (() => {
     catch (e) { UI.toast(e.message, 'error'); }
     finally { UI.loading(false); }
   };
+
+  // ── Nav helpers ───────────────────────────────────────────
+  /** Navigasi ke Test Link screen (session cards) */
+  const navToTestLink = async () => {
+    _showScreenWithLoad('screen-testlink');
+    // Update nav active state
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    document.querySelector('[data-nav="testlink"]')?.classList.add('active');
+  };
+
+  // ── Profile Bottom Drawer ─────────────────────────────────
+  /**
+   * Buka profile drawer — isi data user dan check reset_allowed.
+   */
+  const navToProfile = async () => {
+    const u = state.user;
+    if (!u) return;
+    // Isi drawer info
+    const avEl = document.getElementById('drawer-avatar');
+    if (avEl) avEl.textContent = u.username.charAt(0).toUpperCase();
+    const unEl = document.getElementById('drawer-username');
+    if (unEl) unEl.textContent = u.username;
+    const prEl = document.getElementById('drawer-provider');
+    if (prEl) prEl.textContent = u.provider || 'Provider belum diset';
+    const roEl = document.getElementById('drawer-role');
+    if (roEl) roEl.textContent = u.role === 'admin' ? '⚙️ Admin' : '👤 User';
+    // Tampilkan tombol reset jika allowed (atau admin)
+    const resetBtn = document.getElementById('drawer-reset-btn');
+    if (resetBtn) {
+      const allowed = u.role === 'admin' || u.reset_allowed === true;
+      resetBtn.classList.toggle('hidden', !allowed);
+    }
+    // Buka drawer
+    document.getElementById('profile-drawer-overlay')?.classList.remove('hidden');
+    document.getElementById('profile-drawer')?.classList.remove('hidden');
+  };
+
+  const closeProfileDrawer = () => {
+    document.getElementById('profile-drawer-overlay')?.classList.add('hidden');
+    document.getElementById('profile-drawer')?.classList.add('hidden');
+  };
+
+  /** Buka screen pengaturan dari drawer */
+  const openSettings = async () => {
+    closeProfileDrawer();
+    const u = state.user;
+    if (!u) return;
+    // Isi info card settings
+    const av = document.getElementById('settings-avatar');
+    if (av) av.textContent = u.username.charAt(0).toUpperCase();
+    const unEl = document.getElementById('settings-username-display');
+    if (unEl) unEl.textContent = u.username;
+    const prEl = document.getElementById('settings-provider-display');
+    if (prEl) prEl.textContent = u.provider || 'Belum diset';
+    const roEl = document.getElementById('settings-role-display');
+    if (roEl) roEl.textContent = u.role === 'admin' ? '⚙️ Admin' : '👤 User';
+    const inp = document.getElementById('settings-new-username');
+    if (inp) inp.value = '';
+    // Isi dropdown provider
+    try {
+      const providers = await API.getProviders();
+      const sel = document.getElementById('settings-provider-select');
+      if (sel) {
+        sel.innerHTML = providers.map(p =>
+          `<option value="${p.name}" ${p.name === u.provider ? 'selected' : ''} class="bg-slate-900">${p.name}</option>`
+        ).join('');
+      }
+    } catch { /* abaikan */ }
+    showScreen('screen-user-settings');
+  };
+
+  /** Hapus akun sendiri */
+  const deleteAccount = async () => {
+    closeProfileDrawer();
+    const ok = await UI.confirm(
+      '🗑️ Hapus Akun?',
+      'Semua progress dan data akunmu akan dihapus secara permanen. Yakin?',
+      'Hapus Akun', 'bg-rose-600'
+    );
+    if (!ok) return;
+    // Math verification
+    const a = Math.floor(Math.random() * 9) + 1;
+    const b = Math.floor(Math.random() * 9) + 1;
+    const jawaban = await UI.inputModal('Konfirmasi', `Jawab soal ini: ${a} + ${b} = ?`);
+    if (jawaban === null || parseInt(jawaban, 10) !== a + b)
+      return UI.toast('Jawaban salah. Penghapusan akun dibatalkan.', 'error');
+    UI.loading(true);
+    try {
+      await API.deleteUser(state.user.id);
+      UI.toast('Akun berhasil dihapus.', 'info');
+      logout();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  /** Tampilkan detail perubahan link (semua kategori + info) */
+  const showLinkChanges = async () => {
+    UI.loading(true);
+    try {
+      const cats = await API.getCategories();
+      const sorted = [...cats].sort((a, b) => new Date(b.links_updated_at||0) - new Date(a.links_updated_at||0));
+      const lines = sorted.map(c =>
+        `<div class="flex items-center justify-between py-2 border-b border-slate-800/60 last:border-0">
+          <div class="flex-1 min-w-0">
+            <p class="font-semibold text-sm truncate">${c.name}</p>
+            <p class="text-[10px] text-slate-500">${TYPE_META_LABEL[c.type]||c.type} · ${c.group_name||'Situs'}</p>
+          </div>
+          <div class="text-right shrink-0 ml-3">
+            <p class="text-xs text-indigo-400 font-mono">${c.link_count} link</p>
+            <p class="text-[10px] text-slate-500">${c.links_updated_at ? UI.formatDate(c.links_updated_at) : 'Belum ada'}</p>
+          </div>
+        </div>`
+      ).join('');
+      // Tampilkan di modal konfirmasi (repurpose sebagai info modal)
+      await UI.confirm(
+        '📊 Detail Update Link',
+        `<div class="max-h-64 overflow-y-auto pr-1 -mr-1">${lines}</div>`,
+        'Tutup', 'bg-indigo-600', true
+      );
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  // Label tipe untuk showLinkChanges
+  const TYPE_META_LABEL = { otomatis: 'Otomatis', utama: 'Utama Manual', manual: 'Manual' };
 
   // ── Session & Category Navigation ─────────────────────────
   const openSession = async (sessionName) => {
@@ -416,6 +694,14 @@ const App = (() => {
       await Admin.renderCategories();
     } catch (e) { UI.toast(e.message, 'error'); }
     finally { UI.loading(false); }
+  };
+
+  /** Ganti group_name kategori (Situs / Lainnya) */
+  const adminSetCategoryGroup = async (id, groupName) => {
+    try {
+      await API.setCategoryGroup(id, groupName);
+      UI.toast(`Grup diubah ke: ${groupName}`, 'success');
+    } catch (e) { UI.toast(e.message, 'error'); }
   };
 
   // ── Profile / User Settings ────────────────────────────────
@@ -678,6 +964,7 @@ const App = (() => {
     showScreen(id);
     UI.loading(true);
     const loaders = {
+      'screen-testlink':            () => Screens.renderTestLink(),
       'screen-admin-categories':    () => Admin.renderCategories(),
       'screen-admin-sessions':      () => Admin.renderSessions(),
       'screen-admin-notifications': () => Admin.renderNotifications(),
@@ -716,12 +1003,23 @@ const App = (() => {
   return {
     login, logout, toggleAdminLogin, goBack, showScreen: _showScreenWithLoad,
     openSession, openCategory, openLink, reportStatus, closeStatusModal, markAllDone, resetCategory,
-    navTo, navToSession, navToAdmin, navToProfile,
+    navTo, navToTestLink, navToSession: navToTestLink, navToAdmin, navToProfile,
+    closeProfileDrawer, openSettings, deleteAccount, showLinkChanges,
     saveUsername, saveProvider, resetAllProgress,
+    requestNotification,
     adminAddCategory, adminRenameCategory, adminDeleteCategory, adminEditLinks, adminSaveLinks,
     adminSaveSession, adminAddNotif, adminToggleNotif, adminDeleteNotif,
     adminDeleteUser, adminEditUser, adminSaveAppConfig,
-    adminAddProvider, adminDeleteProvider, adminCycleType,
+    adminToggleResetAllowed: async (id, allowed) => {
+      UI.loading(true);
+      try {
+        await API.toggleResetAllowed(id, allowed);
+        UI.toast(`Reset progress ${allowed ? 'diaktifkan' : 'dinonaktifkan'} untuk user.`, 'success');
+        await Admin.renderUsers();
+      } catch (e) { UI.toast(e.message, 'error'); }
+      finally { UI.loading(false); }
+    },
+    adminAddProvider, adminDeleteProvider, adminCycleType, adminSetCategoryGroup,
     installPWA, dismissInstall,
     kirimLaporan, closeReportModal, copyReport, shareSignal,
     closeConfirm: UI?.closeConfirm, closeInputModal: UI?.closeInputModal

@@ -19,19 +19,30 @@ const Admin = (() => {
       const badge  = TYPE_BADGES[cat.type] || TYPE_BADGES.manual;
       const types  = ['otomatis', 'utama', 'manual'];
       const nextT  = types[(types.indexOf(cat.type) + 1) % types.length];
+      const grp    = cat.group_name || 'Situs';
+      const grpOpts= ['Situs', 'Lainnya'].map(g =>
+        `<option value="${g}" ${g===grp?'selected':''} class="bg-slate-900">${g}</option>`).join('');
+      const safeName = cat.name.replace(/'/g,"\\'");
       return `<div class="glass rounded-xl p-4">
         <div class="flex items-center gap-2 mb-2">
           <p class="font-semibold text-sm truncate flex-1">${cat.name}</p>
           <button onclick="App.adminCycleType(${cat.id}, '${nextT}')"
             class="px-2 py-0.5 rounded-lg border text-[10px] font-bold ${badge.cls} active:scale-95 shrink-0">${badge.label}</button>
         </div>
-        <p class="text-xs text-slate-500 mb-3">${cat.link_count} link · ${cat.links_updated_at ? UI.formatDate(cat.links_updated_at) : '-'}</p>
+        <div class="flex items-center gap-2 mb-3">
+          <label class="text-[10px] text-slate-500 shrink-0">Grup:</label>
+          <select onchange="App.adminSetCategoryGroup(${cat.id}, this.value)"
+            class="flex-1 bg-slate-800/80 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white outline-none focus:border-indigo-500 appearance-none cursor-pointer">
+            ${grpOpts}
+          </select>
+          <span class="text-[10px] text-slate-600">${cat.link_count} link</span>
+        </div>
         <div class="flex gap-2">
-          <button onclick="App.adminEditLinks(${cat.id}, '${cat.name.replace(/'/g,"\\'")}', \`${cat.id}\`)"
+          <button onclick="App.adminEditLinks(${cat.id}, '${safeName}', \`${cat.id}\`)"
             class="flex-1 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold active:scale-95">🔗 Link</button>
-          <button onclick="App.adminRenameCategory(${cat.id}, '${cat.name.replace(/'/g,"\\'")}', this)"
+          <button onclick="App.adminRenameCategory(${cat.id}, '${safeName}', this)"
             class="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 text-xs font-semibold active:scale-95">✏️</button>
-          <button onclick="App.adminDeleteCategory(${cat.id}, '${cat.name.replace(/'/g,"\\'")}', this)"
+          <button onclick="App.adminDeleteCategory(${cat.id}, '${safeName}', this)"
             class="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold active:scale-95">🗑</button>
         </div>
       </div>`;
@@ -108,28 +119,45 @@ const Admin = (() => {
       </div>`).join('') || '<p class="text-center text-slate-500 text-sm py-8">Belum ada notifikasi.</p>';
   };
 
-  /** Render daftar user (dengan provider + tombol edit) */
+  /** Render daftar user — dengan toggle reset_allowed, edit, dan hapus */
   const renderUsers = async () => {
     const users = await API.getUsers();
     document.getElementById('users-count').textContent = `${users.length} user`;
-    document.getElementById('admin-users-list').innerHTML = users.map(u => `
+    document.getElementById('admin-users-list').innerHTML = users.map(u => {
+      const resetOn  = !!u.reset_allowed;
+      const isAdmin  = u.role === 'admin';
+      return `
       <div class="glass rounded-xl p-4">
-        <div class="flex items-center gap-3 mb-2">
-          <div class="w-10 h-10 rounded-xl bg-gradient-to-br ${u.role==='admin'?'from-rose-500 to-pink-600':'from-indigo-500 to-purple-600'} flex items-center justify-center text-sm font-bold shrink-0">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-br ${isAdmin?'from-rose-500 to-pink-600':'from-indigo-500 to-purple-600'} flex items-center justify-center text-sm font-bold shrink-0">
             ${u.username.charAt(0).toUpperCase()}
           </div>
           <div class="flex-1 min-w-0">
-            <p class="font-semibold text-sm truncate">${u.username} ${u.role==='admin'?'<span class="text-xs text-rose-400 font-bold">ADMIN</span>':''}</p>
-            <p class="text-xs text-slate-400">${u.provider || 'Provider belum diset'} · Terakhir: ${u.last_seen ? UI.formatDate(u.last_seen) : '-'}</p>
+            <p class="font-semibold text-sm truncate">${u.username} ${isAdmin?'<span class="text-xs text-rose-400 font-bold ml-1">ADMIN</span>':''}</p>
+            <p class="text-xs text-slate-400">${u.provider || 'Provider belum diset'}</p>
+            <p class="text-[10px] text-slate-600">Terakhir: ${u.last_seen ? UI.formatDate(u.last_seen) : '-'}</p>
           </div>
         </div>
-        <div class="flex gap-2 mt-2">
+        ${!isAdmin ? `
+        <!-- Toggle reset_allowed -->
+        <div class="flex items-center justify-between px-3 py-2.5 rounded-xl mb-2 ${resetOn?'bg-emerald-500/10 border border-emerald-500/20':'bg-slate-800/60 border border-slate-700/40'}">
+          <div>
+            <p class="text-xs font-semibold ${resetOn?'text-emerald-300':'text-slate-400'}">🔄 Reset Progress</p>
+            <p class="text-[10px] text-slate-500">${resetOn?'User dapat reset progress':'User tidak dapat reset'}</p>
+          </div>
+          <button onclick="App.adminToggleResetAllowed('${u.id}', ${!resetOn})"
+            class="px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-all ${resetOn?'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30':'bg-slate-700 text-slate-400 border border-slate-600'}">
+            ${resetOn?'Nonaktifkan':'Aktifkan'}
+          </button>
+        </div>` : ''}
+        <div class="flex gap-2">
           <button onclick="App.adminEditUser('${u.id}', '${u.username}', '${u.provider||''}')"
             class="flex-1 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold active:scale-95">✏️ Edit</button>
-          ${u.role !== 'admin' ? `<button onclick="App.adminDeleteUser('${u.id}', '${u.username}', this)"
+          ${!isAdmin ? `<button onclick="App.adminDeleteUser('${u.id}', '${u.username}', this)"
             class="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold active:scale-95">🗑</button>` : ''}
         </div>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   };
 
   /** Render form konfigurasi tampilan aplikasi (admin) */

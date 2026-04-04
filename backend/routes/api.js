@@ -14,7 +14,7 @@ const { login, me, updateMe }              = require('../controllers/authControl
 const { getCategories, createCategory, renameCategory, deleteCategory } = require('../controllers/categoriesController');
 const { getLinks, saveLinks, deleteLink }   = require('../controllers/linksController');
 const { getProgress, markOpened, updateStatus, markAllOpened, resetProgress } = require('../controllers/progressController');
-const { getUsers, updateUser, deleteUser }  = require('../controllers/usersController');
+const { getUsers, toggleResetAllowed, updateUser, deleteUser } = require('../controllers/usersController');
 const { getSessions, updateSession }        = require('../controllers/configController');
 const { getNotifications, getAllNotifications, createNotification, updateNotification, deleteNotification } = require('../controllers/notificationsController');
 const { getProviders, createProvider, deleteProvider } = require('../controllers/providersController');
@@ -44,9 +44,10 @@ router.patch('/progress/:id',        requireAuth, updateStatus);
 router.delete('/progress',           requireAuth, resetProgress);
 
 // ── Users (admin) ─────────────────────────────────────────────────────
-router.get('/users',                 requireAuth, requireAdmin, getUsers);
-router.patch('/users/:id',           requireAuth, requireAdmin, updateUser);
-router.delete('/users/:id',          requireAuth, requireAdmin, deleteUser);
+router.get('/users',                          requireAuth, requireAdmin, getUsers);
+router.patch('/users/:id',                    requireAuth, requireAdmin, updateUser);
+router.patch('/users/:id/reset-allowed',      requireAuth, requireAdmin, toggleResetAllowed);
+router.delete('/users/:id',                   requireAuth, requireAdmin, deleteUser);
 
 // ── Konfigurasi sesi ──────────────────────────────────────────────────
 router.get('/config/sessions',       requireAuth, getSessions);

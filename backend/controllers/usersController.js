@@ -7,14 +7,29 @@
 
 const supabase = require('../models/supabase');
 
-/** GET /api/users — daftar semua user + provider (admin) */
+/** GET /api/users — daftar semua user + provider + reset_allowed (admin) */
 const getUsers = async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('users')
-      .select('id, username, role, provider, last_seen, created_at')
+      .select('id, username, role, provider, reset_allowed, last_seen, created_at')
       .order('last_seen', { ascending: false });
 
+    if (error) return next(error);
+    res.json(data);
+  } catch (err) { next(err); }
+};
+
+/** PATCH /api/users/:id/reset-allowed — admin toggle reset_allowed */
+const toggleResetAllowed = async (req, res, next) => {
+  try {
+    const { id }      = req.params;
+    const { allowed } = req.body;
+    if (typeof allowed !== 'boolean')
+      return res.status(400).json({ error: 'Field "allowed" harus boolean.' });
+
+    const { data, error } = await supabase
+      .from('users').update({ reset_allowed: allowed }).eq('id', id).select().single();
     if (error) return next(error);
     res.json(data);
   } catch (err) { next(err); }
@@ -58,4 +73,4 @@ const deleteUser = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getUsers, updateUser, deleteUser };
+module.exports = { getUsers, toggleResetAllowed, updateUser, deleteUser };
