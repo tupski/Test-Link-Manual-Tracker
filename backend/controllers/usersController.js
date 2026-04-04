@@ -5,6 +5,7 @@
 
 'use strict';
 
+const bcrypt   = require('bcryptjs');
 const supabase = require('../models/supabase');
 
 /** GET /api/users — daftar semua user + provider + reset_allowed (admin) */
@@ -73,4 +74,50 @@ const deleteUser = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getUsers, toggleResetAllowed, updateUser, deleteUser };
+/**
+ * PATCH /api/auth/me/password
+ * User mengatur atau mengubah kata sandi akun sendiri.
+ * Body: { password, new_password }
+ * - Jika user belum punya password: cukup kirim new_password saja.
+ * - Jika sudah punya password: wajib kirim password lama (untuk verifikasi).
+ */
+const setMyPassword = async (req, res, next) => {
+  try {
+    const userId      = req.user.id;
+    const { password, new_password } = req.body;
+    if (!new_password || new_password.trim().length < 6)
+      return res.status(400).json({ error: 'Kata sandi baru minimal 6 karakter.' });
+
+    // Ambil data user untuk cek apakah sudah punya password
+    const { data: user, error: userErr } = await supabase
+      .from('users').select('password_hash').eq('id', userId).single();
+    if (userErr || !user) return res.status(404).json({ error: 'User tidak ditemukan.' });
+
+    // Jika sudah ada password_hash, wajib verifikasi password lama
+    if (user.password_hash) {
+      if (!password) return res.status(400).json({ error: 'Masukkan kata sandi lama untuk konfirmasi.' });
+      const valid = await bcrypt.compare(password.trim(), user.password_hash);
+      if (!valid) return res.status(401).json({ error: 'Kata sandi lama salah.' });
+    }
+
+    const hash = await bcrypt.hash(new_password.trim(), 10);
+    const { error } = await supabase.from('users').update({ password_hash: hash }).eq('id', userId);
+    if (error) return next(error);
+    res.json({ success: true, message: 'Kata sandi berhasil diperbarui.' });
+  } catch (err) { next(err); }
+};
+
+/**
+ * DELETE /api/auth/me/password
+ * User menghapus kata sandi (akun kembali tanpa proteksi).
+ */
+const removeMyPassword = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const { error } = await supabase.from('users').update({ password_hash: null }).eq('id', userId);
+    if (error) return next(error);
+    res.json({ success: true, message: 'Kata sandi dihapus. Akun tidak lagi terproteksi.' });
+  } catch (err) { next(err); }
+};
+
+module.exports = { getUsers, toggleResetAllowed, updateUser, deleteUser, setMyPassword, removeMyPassword };

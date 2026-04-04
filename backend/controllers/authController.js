@@ -7,40 +7,76 @@
 'use strict';
 
 const jwt      = require('jsonwebtoken');
+const bcrypt   = require('bcryptjs');
 const supabase = require('../models/supabase');
 
 const JWT_SECRET      = (process.env.JWT_SECRET || 'changeme_secret_jwt_2026').trim();
 const ADMIN_PASSWORD  = (process.env.ADMIN_PASSWORD || 'Admin@2026!').trim();
 const JWT_EXPIRES     = '7d';
 
+/** Buat token JWT untuk user */
+const _makeToken = (user) => jwt.sign(
+  { id: user.id, username: user.username, role: user.role, provider: user.provider,
+    reset_allowed: user.reset_allowed },
+  JWT_SECRET, { expiresIn: JWT_EXPIRES }
+);
+
 /**
  * POST /api/auth/login
- * Body: { username, password? }
- * - User biasa: hanya username (tidak perlu password)
- * - Admin: username "admin" + password dari .env
+ * Body: { username, password?, provider? }
+ * - Admin: username "admin" + password env
+ * - User biasa: username saja (atau + password jika user sudah set password)
+ * - Whitelist: jika tabel allowed_usernames tidak kosong, hanya yang ada di situ yang bisa masuk
  */
 const login = async (req, res, next) => {
   try {
     const { username, password, provider } = req.body;
-
-    if (!username || !username.trim()) {
+    if (!username || !username.trim())
       return res.status(400).json({ error: 'Username wajib diisi.' });
-    }
 
-    const uname      = username.trim().toLowerCase();
-    const pwdClean   = (password || '').trim();
-    const provClean  = (provider || '').trim() || null;
-    let role         = 'user';
+    const uname     = username.trim().toLowerCase();
+    const pwdClean  = (password || '').trim();
+    const provClean = (provider || '').trim() || null;
+    let   role      = 'user';
 
-    // --- Cek apakah login sebagai admin ---
+    // ── Admin check ─────────────────────────────────────────
     if (uname === 'admin') {
-      if (!pwdClean || pwdClean !== ADMIN_PASSWORD) {
+      if (!pwdClean || pwdClean !== ADMIN_PASSWORD)
         return res.status(401).json({ error: 'Password admin salah.' });
-      }
       role = 'admin';
+    } else {
+      // ── Whitelist check ───────────────────────────────────
+      const { count } = await supabase
+        .from('allowed_usernames')
+        .select('*', { count: 'exact', head: true });
+      if (count > 0) {
+        const { data: allowed } = await supabase
+          .from('allowed_usernames')
+          .select('username')
+          .eq('username', uname)
+          .maybeSingle();
+        if (!allowed)
+          return res.status(403).json({ error: 'Username tidak terdaftar. Hubungi admin.' });
+      }
     }
 
-    // --- Upsert user ke database (simpan provider) ---
+    // ── Ambil user yang sudah ada (untuk cek password_hash) ──
+    const { data: existingUser } = await supabase
+      .from('users')
+      .select('*')
+      .eq('username', uname)
+      .maybeSingle();
+
+    // ── Cek password user (jika sudah diset) ─────────────────
+    if (existingUser?.password_hash && uname !== 'admin') {
+      if (!pwdClean)
+        return res.status(401).json({ error: 'Akun ini dilindungi kata sandi. Masukkan kata sandi Anda.' });
+      const valid = await bcrypt.compare(pwdClean, existingUser.password_hash);
+      if (!valid)
+        return res.status(401).json({ error: 'Kata sandi salah.' });
+    }
+
+    // ── Upsert user ke database ───────────────────────────────
     const upsertData = { username: uname, role, last_seen: new Date().toISOString() };
     if (provClean) upsertData.provider = provClean;
 
@@ -52,17 +88,11 @@ const login = async (req, res, next) => {
 
     if (error) return next(error);
 
-    // --- Buat JWT (sertakan provider untuk dipakai di report) ---
-    const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role, provider: user.provider },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES }
-    );
-
-    res.json({ token, user: { id: user.id, username: user.username, role: user.role, provider: user.provider } });
-  } catch (err) {
-    next(err);
-  }
+    const token = _makeToken(user);
+    res.json({ token, user: { id: user.id, username: user.username, role: user.role,
+      provider: user.provider, reset_allowed: user.reset_allowed,
+      has_password: !!user.password_hash } });
+  } catch (err) { next(err); }
 };
 
 /**

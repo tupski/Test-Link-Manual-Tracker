@@ -77,10 +77,8 @@ const App = (() => {
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value;
     const provider = document.getElementById('login-provider')?.value || '';
-    // Admin tidak wajib pilih provider (karena pakai password)
-    const isAdminMode = !!password;
     if (!username) return UI.toast('Username wajib diisi!', 'error');
-    if (!provider && !isAdminMode) return UI.toast('Pilih provider internet terlebih dahulu!', 'error');
+    // Provider opsional untuk semua user — bisa diatur nanti di pengaturan
     // Simpan pilihan provider terakhir agar diingat saat login berikutnya
     if (provider) localStorage.setItem('lt_last_provider', provider);
     UI.loading(true);
@@ -95,6 +93,7 @@ const App = (() => {
   };
 
   const logout = async () => {
+    closeProfileDrawer(); // Tutup drawer terlebih dahulu
     const ok = await UI.confirm('Keluar?', 'Yakin ingin keluar dari akun ini?', 'Keluar', 'bg-indigo-600');
     if (!ok) return;
     // Bersihkan semua data sesi dari localStorage
@@ -366,20 +365,22 @@ const App = (() => {
     setEl('rd-os', os);
     setEl('rd-browser', browser);
 
-    // Fetch IP + VPN + Lokasi + ISP dari ip-api.com (gratis, no-auth)
+    // Fetch IP + VPN + Lokasi + ISP dari ipapi.co (HTTPS, gratis, no-auth)
+    // Catatan: ip-api.com hanya support HTTP (blocked oleh browser HTTPS policy)
     try {
-      const r   = await fetch('https://ip-api.com/json/?fields=query,country,regionName,city,isp,org,hosting', { cache: 'no-store' });
+      const r   = await fetch('https://ipapi.co/json/', { cache: 'no-store' });
       const d   = await r.json();
-      const ip  = d.query || '—';
-      const isp = d.isp || d.org || '—';
-      const loc = [d.city, d.regionName, d.country].filter(Boolean).join(', ') || '—';
-      // Heuristik VPN: jika hosting=true atau org mengandung kata VPN
-      const vpnKeywords = /vpn|proxy|datacenter|hosting|cloud|server|hide|tunnel/i;
-      const isVPN = d.hosting === true || vpnKeywords.test(d.org || '') || vpnKeywords.test(d.isp || '');
+      const ip  = d.ip || '—';
+      const isp = d.org || '—';  // ipapi.co: field "org" berisi "AS12345 Nama ISP"
+      const ispDisplay = isp.replace(/^AS\d+\s*/,''); // hapus prefix AS number
+      const loc = [d.city, d.region, d.country_name].filter(Boolean).join(', ') || '—';
+      // Heuristik VPN: jika org mengandung kata VPN/datacenter
+      const vpnKeywords = /vpn|proxy|datacenter|hosting|cloud|server|hide|tunnel|digitalocean|amazon|google|microsoft azure|linode|vultr/i;
+      const isVPN = vpnKeywords.test(d.org || '') || d.asn?.startsWith?.('AS396982');  // Google Cloud etc.
 
       setEl('rd-ip',  ip);
       setEl('rd-loc', loc);
-      setEl('rd-isp', isp);
+      setEl('rd-isp', ispDisplay || isp);
       setEl('rd-vpn', isVPN ? '🛡️ Terdeteksi Aktif' : '✅ Tidak Aktif');
 
       const vpnEl = document.getElementById('rd-vpn');
@@ -437,14 +438,41 @@ const App = (() => {
       const allowed = u.role === 'admin' || u.reset_allowed === true;
       resetBtn.classList.toggle('hidden', !allowed);
     }
-    // Buka drawer
-    document.getElementById('profile-drawer-overlay')?.classList.remove('hidden');
-    document.getElementById('profile-drawer')?.classList.remove('hidden');
+    // Update icon tema di drawer
+    const isLight = document.documentElement.classList.contains('light');
+    const dti = document.getElementById('drawer-theme-icon');
+    const dtl = document.getElementById('drawer-theme-label');
+    if (dti) dti.textContent = isLight ? '☀️' : '🌙';
+    if (dtl) dtl.textContent = isLight ? 'Mode Terang (aktif)' : 'Mode Gelap (aktif)';
+
+    // Buka drawer dengan animasi slide-up
+    const overlay = document.getElementById('profile-drawer-overlay');
+    const drawer  = document.getElementById('profile-drawer');
+    if (!overlay || !drawer) return;
+    overlay.classList.remove('hidden');
+    // Pastikan translateY-full terpasang sebelum transisi
+    drawer.style.transform = 'translateY(100%)';
+    // Force reflow agar transisi berjalan
+    void drawer.offsetHeight;
+    drawer.style.transform = 'translateY(0)';
+
+    // Swipe-down untuk tutup (one-time setup)
+    if (!drawer._swipeSetup) {
+      drawer._swipeSetup = true;
+      let startY = 0;
+      drawer.addEventListener('touchstart', e => { startY = e.touches[0].clientY; }, { passive: true });
+      drawer.addEventListener('touchend', e => {
+        if (e.changedTouches[0].clientY - startY > 80) closeProfileDrawer();
+      }, { passive: true });
+    }
   };
 
   const closeProfileDrawer = () => {
-    document.getElementById('profile-drawer-overlay')?.classList.add('hidden');
-    document.getElementById('profile-drawer')?.classList.add('hidden');
+    const overlay = document.getElementById('profile-drawer-overlay');
+    const drawer  = document.getElementById('profile-drawer');
+    if (!drawer) return;
+    drawer.style.transform = 'translateY(100%)';
+    if (overlay) overlay.classList.add('hidden');
   };
 
   /** Buka screen pengaturan dari drawer */
@@ -473,6 +501,8 @@ const App = (() => {
         ).join('');
       }
     } catch { /* abaikan */ }
+    // Render status password
+    _refreshPasswordUI(u.has_password === true);
     showScreen('screen-user-settings');
   };
 
@@ -556,6 +586,35 @@ const App = (() => {
   // ── Link Actions ──────────────────────────────────────────
   const openLink = async (linkId, url, catId, catName, sessionName, progId) => {
     const today = UI.todayWIB();
+
+    // ── Peringatan jika di luar jam sesi ─────────────────────
+    // Cek timer sesi — jika waiting/expired, tampilkan konfirmasi
+    if (!progId && sessionName) {
+      try {
+        const sessions = await API.getSessions();
+        const sess     = sessions.find(s => s.session_name === sessionName);
+        if (sess) {
+          const timer = UI.sessionTimer(sess.start_hour, sess.start_minute, sess.normal_hours, sess.max_hours);
+          const sessLabel = { pagi: 'Pagi', siang: 'Sore', malam: 'Malam' }[sessionName] || sessionName;
+          if (timer.status === 'waiting') {
+            const ok = await UI.confirm(
+              '⏰ Sesi Belum Dimulai',
+              `Jam test link sesi ${sessLabel} belum dimulai. ${timer.label.replace('Mulai ', 'Mulai jam ')} WIB lagi.\n\n⚠️ Link yang dibuka tidak akan tercatat dalam sesi ini.`,
+              'Buka Tetap', 'bg-amber-600'
+            );
+            if (!ok) return;
+          } else if (timer.status === 'expired') {
+            const ok = await UI.confirm(
+              '⏰ Sesi Sudah Berakhir',
+              `Waktu test link sesi ${sessLabel} sudah habis.\n\n⚠️ Link yang dibuka tidak akan tercatat dalam sesi ini.`,
+              'Buka Tetap', 'bg-rose-600'
+            );
+            if (!ok) return;
+          }
+        }
+      } catch { /* abaikan error cek sesi, tetap buka link */ }
+    }
+
     UI.loading(true);
     try {
       let prog;
@@ -576,16 +635,40 @@ const App = (() => {
   const reportStatus = async (status) => {
     closeStatusModal();
     if (!state.pendingProgId) return;
-    UI.loading(true);
-    try {
-      await API.updateStatus(state.pendingProgId, status);
-      UI.toast(`Status: ${status === 'normal' ? '✅ Normal' : status === 'blocked' ? '🚫 Diblokir' : '❌ Error 404'}`, 'success');
-      // Refresh daftar link setelah update status
-      await Screens.renderLinks(state.currentCatId, state.currentCatName, state.currentSession);
-      // Auto-update dashboard di background (tidak await agar tidak blok UI)
-      Screens.renderDashboard().catch(() => {});
-    } catch (e) { UI.toast(e.message, 'error'); }
-    finally { UI.loading(false); state.pendingProgId = null; }
+
+    // ── Optimistic: update DOM langsung tanpa tunggu API ─────
+    const statusMap = {
+      normal:    { icon: '✅', label: 'Normal',    cls: 'text-emerald-400', bg: 'border-emerald-500/20 bg-emerald-500/5' },
+      blocked:   { icon: '🚫', label: 'Diblokir',  cls: 'text-rose-400',    bg: 'border-rose-500/20 bg-rose-500/5' },
+      error_404: { icon: '❌', label: 'Error 404', cls: 'text-amber-400',   bg: 'border-amber-500/20 bg-amber-500/5' }
+    };
+    const sm = statusMap[status];
+    if (sm) {
+      const cardEl = document.querySelector(`[data-prog-link="${state.pendingLinkId}"]`);
+      if (cardEl) {
+        cardEl.className = `glass rounded-xl p-3.5 flex items-center gap-3 ${sm.bg}`;
+        const stTxt = cardEl.querySelector('[data-status-text]');
+        if (stTxt) { stTxt.textContent = `${sm.icon} ${sm.label}`; stTxt.className = `text-[10px] mt-0.5 ${sm.cls}`; }
+        const openBtn = cardEl.querySelector('[data-open-btn]');
+        if (openBtn) { openBtn.textContent = '↩ Buka Lagi'; openBtn.className = 'shrink-0 px-4 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-all bg-slate-700 text-slate-300'; }
+      }
+    }
+    UI.toast(`${sm?.icon || ''} ${sm?.label || status}`, 'success', 1500);
+
+    // Simpan progId lalu reset state (agar tidak terduplikasi)
+    const progId  = state.pendingProgId;
+    state.pendingProgId = null;
+
+    // ── API call + re-render di background (tidak blok UI) ──
+    API.updateStatus(progId, status)
+      .then(() => {
+        Screens.renderLinks(state.currentCatId, state.currentCatName, state.currentSession).catch(() => {});
+        Screens.renderDashboard().catch(() => {});
+      })
+      .catch(e => {
+        UI.toast('Gagal update: ' + e.message, 'error');
+        Screens.renderLinks(state.currentCatId, state.currentCatName, state.currentSession).catch(() => {});
+      });
   };
 
   const closeStatusModal = (e) => {
@@ -804,6 +887,100 @@ const App = (() => {
     } catch (e) { UI.toast(e.message, 'error'); }
   };
 
+  // ── Password user (self-service) ──────────────────────────
+  /** Simpan/ubah kata sandi akun user */
+  const savePassword = async () => {
+    const oldPwd = document.getElementById('settings-password-old')?.value || '';
+    const newPwd = document.getElementById('settings-password-new')?.value || '';
+    if (!newPwd.trim()) return UI.toast('Kata sandi baru tidak boleh kosong!', 'error');
+    UI.loading(true);
+    try {
+      await API.setMyPassword(oldPwd || undefined, newPwd);
+      state.user = { ...state.user, has_password: true };
+      _refreshPasswordUI(true);
+      document.getElementById('settings-password-new').value = '';
+      document.getElementById('settings-password-old').value = '';
+      UI.toast('Kata sandi berhasil disimpan! 🔒', 'success');
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  /** Hapus kata sandi akun user */
+  const removePassword = async () => {
+    const ok = await UI.confirm('Hapus Kata Sandi?', 'Akun tidak akan lagi terproteksi kata sandi.', 'Hapus', 'bg-rose-600');
+    if (!ok) return;
+    UI.loading(true);
+    try {
+      await API.removeMyPassword();
+      state.user = { ...state.user, has_password: false };
+      _refreshPasswordUI(false);
+      UI.toast('Kata sandi dihapus.', 'info');
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  /** Update tampilan password section di settings */
+  const _refreshPasswordUI = (hasPassword) => {
+    const badge   = document.getElementById('settings-password-badge');
+    const desc    = document.getElementById('settings-password-desc');
+    const oldWrap = document.getElementById('settings-password-old-wrap');
+    const remBtn  = document.getElementById('settings-password-remove-btn');
+    if (hasPassword) {
+      if (badge)   { badge.textContent = '🔒 Aktif'; badge.className = 'text-[10px] px-2 py-0.5 rounded-lg font-bold bg-emerald-500/20 text-emerald-400'; }
+      if (desc)    desc.textContent = 'Akun Anda dilindungi kata sandi. Masukkan kata sandi lama untuk mengubahnya.';
+      if (oldWrap) oldWrap.classList.remove('hidden');
+      if (remBtn)  remBtn.classList.remove('hidden');
+    } else {
+      if (badge)   { badge.textContent = 'Tidak Aktif'; badge.className = 'text-[10px] px-2 py-0.5 rounded-lg font-bold bg-slate-700 text-slate-400'; }
+      if (desc)    desc.textContent = 'Buat kata sandi untuk melindungi akun Anda dari akses tidak sah.';
+      if (oldWrap) oldWrap.classList.add('hidden');
+      if (remBtn)  remBtn.classList.add('hidden');
+    }
+  };
+
+  // ── Admin: Whitelist Username ──────────────────────────────
+  /** Tampilkan & render whitelist screen */
+  const adminRenderWhitelist = async () => {
+    try {
+      const { data, is_active } = await API.getWhitelist();
+      const banner = document.getElementById('whitelist-status-banner');
+      if (banner) {
+        banner.className = `glass rounded-xl p-3 mb-3 text-sm ${is_active ? 'bg-rose-500/10 border border-rose-500/20 text-rose-300' : 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'}`;
+        banner.textContent = is_active
+          ? `🔒 Whitelist AKTIF — hanya ${data.length} username yang bisa masuk`
+          : '🔓 Whitelist NONAKTIF — semua username boleh masuk';
+      }
+      const list = document.getElementById('admin-whitelist-list');
+      if (!list) return;
+      list.innerHTML = data.length ? data.map(w =>
+        `<div class="glass rounded-xl px-4 py-3 flex items-center gap-3">
+          <span class="font-mono text-sm flex-1">@${w.username}</span>
+          <button onclick="App.adminRemoveWhitelist(${w.id}, '${w.username}')" class="text-rose-400 font-bold text-xs px-3 py-1.5 rounded-lg bg-rose-500/10 active:scale-95">Hapus</button>
+        </div>`
+      ).join('') : '<p class="text-center text-slate-500 text-sm py-6">Belum ada username. Tambahkan untuk mengaktifkan whitelist.</p>';
+    } catch (e) { UI.toast(e.message, 'error'); }
+  };
+
+  const adminAddWhitelist = async () => {
+    const username = await UI.inputModal('Tambah Username', '@username...', '', 'Username yang diizinkan masuk:');
+    if (!username) return;
+    try {
+      await API.addToWhitelist(username);
+      UI.toast(`@${username} ditambahkan ke whitelist ✅`, 'success');
+      adminRenderWhitelist();
+    } catch (e) { UI.toast(e.message, 'error'); }
+  };
+
+  const adminRemoveWhitelist = async (id, username) => {
+    const ok = await UI.confirm('Hapus dari Whitelist?', `@${username} tidak akan bisa masuk lagi jika whitelist aktif.`, 'Hapus', 'bg-rose-600');
+    if (!ok) return;
+    try {
+      await API.removeFromWhitelist(id);
+      UI.toast(`@${username} dihapus ✅`, 'success');
+      adminRenderWhitelist();
+    } catch (e) { UI.toast(e.message, 'error'); }
+  };
+
   /** Simpan username baru (PATCH /auth/me) */
   const saveUsername = async () => {
     const newName = document.getElementById('settings-new-username')?.value.trim();
@@ -859,7 +1036,9 @@ const App = (() => {
     const b = Math.floor(Math.random() * 9) + 1;
     const jawaban = await UI.inputModal(
       '⚠️ Konfirmasi Reset',
-      `Jawab soal ini untuk melanjutkan reset:\n${a} + ${b} = ?`
+      'Jawaban...',
+      '',
+      `Soal: ${a} + ${b} = ?`  // ditampilkan sebagai label di atas input
     );
     if (jawaban === null || jawaban === undefined) return;
     if (parseInt(jawaban, 10) !== a + b)
@@ -1045,7 +1224,8 @@ const App = (() => {
       'screen-admin-notifications': () => Admin.renderNotifications(),
       'screen-admin-users':         () => Admin.renderUsers(),
       'screen-admin-providers':     () => Admin.renderProviders(),
-      'screen-admin-app':           () => Admin.renderAppConfig()
+      'screen-admin-app':           () => Admin.renderAppConfig(),
+      'screen-admin-whitelist':     () => adminRenderWhitelist()
     };
     if (loaders[id]) loaders[id]().catch(e => UI.toast(e.message,'error')).finally(() => UI.loading(false));
     else UI.loading(false);
@@ -1057,10 +1237,11 @@ const App = (() => {
     const html = document.documentElement;
     if (isLight) html.classList.add('light');
     else html.classList.remove('light');
-    const icon  = document.getElementById('theme-icon');
-    const label = document.getElementById('theme-label');
-    if (icon)  icon.textContent  = isLight ? '☀️' : '🌙';
-    if (label) label.textContent = isLight ? 'Terang' : 'Gelap';
+    // Update icon drawer profil
+    const dti = document.getElementById('drawer-theme-icon');
+    const dtl = document.getElementById('drawer-theme-label');
+    if (dti) dti.textContent = isLight ? '☀️' : '🌙';
+    if (dtl) dtl.textContent = isLight ? 'Mode Terang (aktif)' : 'Mode Gelap (aktif)';
   };
 
   /** Toggle light/dark mode — simpan preferensi ke localStorage */
@@ -1119,6 +1300,8 @@ const App = (() => {
       finally { UI.loading(false); }
     },
     adminAddProvider, adminDeleteProvider, adminCycleType, adminSetCategoryGroup,
+    adminAddWhitelist, adminRemoveWhitelist, adminRenderWhitelist,
+    savePassword, removePassword,
     installPWA, dismissInstall,
     kirimLaporan, closeReportModal, copyReport, shareSignal,
     toggleTheme,

@@ -47,10 +47,16 @@ const UI = (() => {
     });
   };
 
-  /** Modal input teks */
-  const inputModal = (title, placeholder = '', defaultVal = '') => {
+  /** Modal input teks — questionLabel tampil sebagai label di atas input */
+  const inputModal = (title, placeholder = '', defaultVal = '', questionLabel = '') => {
     return new Promise(resolve => {
       document.getElementById('input-modal-title').textContent = title;
+      // Tampilkan question label di atas input jika ada
+      const qEl = document.getElementById('input-modal-question');
+      if (qEl) {
+        qEl.textContent = questionLabel;
+        qEl.style.display = questionLabel ? 'block' : 'none';
+      }
       const field = document.getElementById('input-modal-field');
       field.placeholder = placeholder;
       field.value = defaultVal;

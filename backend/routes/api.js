@@ -20,6 +20,8 @@ const { getNotifications, getAllNotifications, createNotification, updateNotific
 const { getProviders, createProvider, deleteProvider } = require('../controllers/providersController');
 const { getAppConfig, updateAppConfig }     = require('../controllers/appConfigController');
 const { getPublicCategories, getPublicLinks, getPublicSessions, getPublicStats } = require('../controllers/publicController');
+const { getWhitelist, addToWhitelist, removeFromWhitelist } = require('../controllers/whitelistController');
+const { setMyPassword, removeMyPassword }   = require('../controllers/usersController');
 
 // ── Auth ─────────────────────────────────────────────────────────────
 router.post('/auth/login', login);
@@ -72,11 +74,18 @@ router.get('/config/app',            getAppConfig);
 router.patch('/config/app',          requireAuth, requireAdmin, updateAppConfig);
 
 // ── Public API (tanpa auth) — untuk Android automation ───────────────
-// Endpoint read-only, tidak butuh token JWT.
-// Gunakan untuk mengambil data kategori, link, sesi, dan statistik.
 router.get('/public/categories',     getPublicCategories);
 router.get('/public/links/:catId',   getPublicLinks);
 router.get('/public/sessions',       getPublicSessions);
 router.get('/public/stats',          getPublicStats);
+
+// ── Password user (self-service) ──────────────────────────────────────
+router.patch('/auth/me/password',    requireAuth, setMyPassword);
+router.delete('/auth/me/password',   requireAuth, removeMyPassword);
+
+// ── Whitelist username (admin) ────────────────────────────────────────
+router.get('/whitelist',             requireAuth, requireAdmin, getWhitelist);
+router.post('/whitelist',            requireAuth, requireAdmin, addToWhitelist);
+router.delete('/whitelist/:id',      requireAuth, requireAdmin, removeFromWhitelist);
 
 module.exports = router;

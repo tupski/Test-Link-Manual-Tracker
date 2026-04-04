@@ -7,6 +7,10 @@
 
 const Screens = (() => {
 
+  // ── Mapping tampilan nama sesi (siang → Sore) ────────────────────────
+  const SESS_DISPLAY = { pagi: 'Pagi', siang: 'Sore', malam: 'Malam' };
+  const SESS_EMOJI   = { pagi: '🌅',   siang: '🌇',   malam: '🌙'   };
+
   // ── Helper: metadata per tipe kategori ───────────────────────────────
   const TYPE_META = {
     otomatis: { label: '🤖 Test Link Otomatis',    color: 'text-indigo-400',  border: 'border-indigo-500/30', bg: 'bg-indigo-500/5'  },
@@ -146,21 +150,44 @@ const Screens = (() => {
       </div>`;
     };
 
+    // Tanggal hari ini WIB untuk ditampilkan di bawah sesi
+    const todayDisplay = new Date(Date.now() + 7 * 3600000)
+      .toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+
+    // ── Cek apakah semua tipe kategori sudah 100% selesai hari ini ──
+    const finalStatuses = new Set(['normal', 'blocked', 'error_404']);
+    const _typeAllDone = (type) => {
+      const typeCats  = cats.filter(c => c.type === type);
+      const typeTotal = typeCats.reduce((a, c) => a + Number(c.link_count), 0);
+      if (!typeTotal) return true; // tipe tidak ada = skip
+      const typeDone  = progress.filter(p =>
+        typeCats.some(c => c.id === p.category_id) && finalStatuses.has(p.status)
+      ).length;
+      return typeDone >= typeTotal;
+    };
+    const allDone = _typeAllDone('otomatis') && _typeAllDone('utama') && _typeAllDone('manual');
+    const laporanBtn = document.getElementById('btn-laporan-testlink');
+    if (laporanBtn) laporanBtn.classList.toggle('hidden', !allDone);
+
     container.innerHTML = sessions.map(s => {
       const timer      = UI.sessionTimer(s.start_hour, s.start_minute, s.normal_hours, s.max_hours);
       const sessProg   = progress.filter(p => p.session_name === s.session_name);
       const totalLinks = cats.reduce((a, c) => a + Number(c.link_count), 0);
       const doneLinks  = sessProg.length;
       const pct        = totalLinks ? Math.round(doneLinks / totalLinks * 100) : 0;
-      const sessEmoji  = { pagi: '🌅', siang: '☀️', malam: '🌙' }[s.session_name] || '🕐';
-      const sessLabel  = s.session_name.charAt(0).toUpperCase() + s.session_name.slice(1);
+      const sessEmoji  = SESS_EMOJI[s.session_name]   || '🕐';
+      const sessLabel  = SESS_DISPLAY[s.session_name] || s.session_name;
       const startLabel = UI.formatTime(s.start_hour, s.start_minute);
 
       return `<div class="glass rounded-2xl p-5 active:scale-[.98] transition-all cursor-pointer" onclick="App.openSession('${s.session_name}')">
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center gap-3">
             <span class="text-2xl">${sessEmoji}</span>
-            <div><h3 class="font-bold text-base">${sessLabel}</h3><p class="text-slate-400 text-xs mt-0.5">${startLabel} WIB</p></div>
+            <div>
+              <h3 class="font-bold text-base">${sessLabel}</h3>
+              <p class="text-slate-400 text-xs mt-0.5">${startLabel} WIB</p>
+              <p class="text-slate-500 text-[10px] mt-0.5">${todayDisplay}</p>
+            </div>
           </div>
           ${badgeFor(timer)}
         </div>
@@ -188,9 +215,9 @@ const Screens = (() => {
     ]);
     const sess = sessions.find(s => s.session_name === sessionName) || {};
 
-    // Emoji & label sesi
-    const sessEmoji = { pagi: '🌅', siang: '☀️', malam: '🌙' }[sessionName] || '🕐';
-    const sessLabel = sessionName.charAt(0).toUpperCase() + sessionName.slice(1);
+    // Emoji & label sesi (siang ditampilkan sebagai "Sore")
+    const sessEmoji = SESS_EMOJI[sessionName]   || '🕐';
+    const sessLabel = SESS_DISPLAY[sessionName] || sessionName;
 
     // Hitung rentang waktu sesi (mulai — selesai berdasarkan max_hours)
     const startH  = sess.start_hour   ?? 0;
@@ -234,7 +261,7 @@ const Screens = (() => {
         <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-1.5">
           <div class="h-full ${isDone ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-indigo-500 to-purple-500'} rounded-full progress-bar" style="width:${pct}%"></div>
         </div>
-        <p class="text-[10px] text-slate-500">🕐 ${updated}</p>
+        <p class="text-[10px] text-slate-500">🕐 Terakhir Update: ${updated}</p>
       </div>`;
     };
 
@@ -294,7 +321,7 @@ const Screens = (() => {
     const cats     = await API.getCategories();
     const cat      = cats.find(c => c.id === catId) || {};
 
-    document.getElementById('links-session-label').textContent = sessionName;
+    document.getElementById('links-session-label').textContent = SESS_DISPLAY[sessionName] || sessionName;
     document.getElementById('links-cat-name').textContent      = catName;
     document.getElementById('links-updated').textContent       = cat.links_updated_at ? UI.formatDate(cat.links_updated_at) : '';
 
@@ -309,17 +336,21 @@ const Screens = (() => {
     const statusBg    = { normal:'border-emerald-500/20 bg-emerald-500/5', blocked:'border-rose-500/20 bg-rose-500/5', error_404:'border-amber-500/20 bg-amber-500/5', opened:'border-indigo-500/20 bg-indigo-500/5' };
 
     const container = document.getElementById('links-list');
+    // data-prog-link dipakai untuk optimistic update di reportStatus
     container.innerHTML = links.map(link => {
       const prog = catProg.find(p => p.link_id === link.id);
       const s    = prog?.status || 'none';
       const domain = link.url.replace(/^https?:\/\//,'').split('/')[0];
+      const statusTxt = s !== 'none'
+        ? `<p class="text-[10px] mt-0.5 ${s==='normal'?'text-emerald-400':s==='blocked'?'text-rose-400':s==='error_404'?'text-amber-400':'text-indigo-400'}" data-status-text>${statusIcon[s]} ${statusLabel[s]}</p>`
+        : `<p class="text-[10px] mt-0.5" data-status-text></p>`;
 
-      return `<div class="glass rounded-xl p-3.5 flex items-center gap-3 ${s !== 'none' ? statusBg[s] || '' : ''}">
+      return `<div class="glass rounded-xl p-3.5 flex items-center gap-3 ${s !== 'none' ? statusBg[s] || '' : ''}" data-prog-link="${link.id}">
         <div class="flex-1 min-w-0">
           <p class="text-xs text-slate-400 font-mono truncate">${domain}</p>
-          ${s !== 'none' ? `<p class="text-[10px] mt-0.5 ${s==='normal'?'text-emerald-400':s==='blocked'?'text-rose-400':s==='error_404'?'text-amber-400':'text-indigo-400'}">${statusIcon[s]} ${statusLabel[s]}</p>` : ''}
+          ${statusTxt}
         </div>
-        <button onclick="App.openLink(${link.id}, '${link.url.replace(/'/g,"\\'")}', ${catId}, '${catName.replace(/'/g,"\\'")}', '${sessionName}', '${prog?.id||''}')"
+        <button data-open-btn onclick="App.openLink(${link.id}, '${link.url.replace(/'/g,"\\'")}', ${catId}, '${catName.replace(/'/g,"\\'")}', '${sessionName}', '${prog?.id||''}')"
           class="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-all ${s !== 'none' ? 'bg-slate-700 text-slate-300' : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/20'}">
           ${s !== 'none' ? '↩ Buka Lagi' : 'Buka'}
         </button>

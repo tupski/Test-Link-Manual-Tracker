@@ -93,6 +93,15 @@ const API = (() => {
     getAppConfig: () => fetch(BASE + '/config/app')
       .then(r => r.json())
       .then(d => { if (d.error) throw new Error(d.error); return d; }),
-    updateAppConfig: (data)       => req('PATCH', '/config/app', data)
+    updateAppConfig: (data)       => req('PATCH', '/config/app', data),
+
+    // ── Password user (self-service) ──────────────────────────
+    setMyPassword:    (password, new_password) => req('PATCH', '/auth/me/password', { password, new_password }),
+    removeMyPassword: ()                       => req('DELETE', '/auth/me/password'),
+
+    // ── Whitelist username (admin only) ───────────────────────
+    getWhitelist:          ()         => req('GET',    '/whitelist'),
+    addToWhitelist:        (username) => req('POST',   '/whitelist', { username }),
+    removeFromWhitelist:   (id)       => req('DELETE', `/whitelist/${id}`)
   };
 })();
