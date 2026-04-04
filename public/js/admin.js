@@ -5,22 +5,37 @@
 
 const Admin = (() => {
 
-  /** Render daftar kategori di admin */
+  // Label dan warna per tipe kategori
+  const TYPE_BADGES = {
+    otomatis: { label:'Otomatis', cls:'bg-indigo-500/20 text-indigo-300 border-indigo-500/30' },
+    utama:    { label:'Utama',    cls:'bg-amber-500/20 text-amber-300 border-amber-500/30'   },
+    manual:   { label:'Manual',   cls:'bg-slate-600/40 text-slate-300 border-slate-500/30'   }
+  };
+
+  /** Render daftar kategori di admin (dengan badge tipe dan tombol ganti tipe) */
   const renderCategories = async () => {
     const cats = await API.getCategories();
-    document.getElementById('admin-cat-list').innerHTML = cats.map(cat => `
-      <div class="glass rounded-xl p-4 flex items-center gap-3">
-        <div class="flex-1 min-w-0">
-          <p class="font-semibold text-sm truncate">${cat.name}</p>
-          <p class="text-xs text-slate-400 mt-0.5">${cat.link_count} link · Diperbarui: ${cat.links_updated_at ? UI.formatDate(cat.links_updated_at) : '-'}</p>
+    document.getElementById('admin-cat-list').innerHTML = cats.map(cat => {
+      const badge  = TYPE_BADGES[cat.type] || TYPE_BADGES.manual;
+      const types  = ['otomatis', 'utama', 'manual'];
+      const nextT  = types[(types.indexOf(cat.type) + 1) % types.length];
+      return `<div class="glass rounded-xl p-4">
+        <div class="flex items-center gap-2 mb-2">
+          <p class="font-semibold text-sm truncate flex-1">${cat.name}</p>
+          <button onclick="App.adminCycleType(${cat.id}, '${nextT}')"
+            class="px-2 py-0.5 rounded-lg border text-[10px] font-bold ${badge.cls} active:scale-95 shrink-0">${badge.label}</button>
         </div>
-        <button onclick="App.adminEditLinks(${cat.id}, '${cat.name.replace(/'/g,"\\'")}', \`${(cat.id)}\`)"
-          class="px-3 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold active:scale-95">Link</button>
-        <button onclick="App.adminRenameCategory(${cat.id}, '${cat.name.replace(/'/g,"\\'")}', this)"
-          class="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 text-xs font-semibold active:scale-95">✏️</button>
-        <button onclick="App.adminDeleteCategory(${cat.id}, '${cat.name.replace(/'/g,"\\'")}', this)"
-          class="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold active:scale-95">🗑</button>
-      </div>`).join('');
+        <p class="text-xs text-slate-500 mb-3">${cat.link_count} link · ${cat.links_updated_at ? UI.formatDate(cat.links_updated_at) : '-'}</p>
+        <div class="flex gap-2">
+          <button onclick="App.adminEditLinks(${cat.id}, '${cat.name.replace(/'/g,"\\'")}', \`${cat.id}\`)"
+            class="flex-1 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold active:scale-95">🔗 Link</button>
+          <button onclick="App.adminRenameCategory(${cat.id}, '${cat.name.replace(/'/g,"\\'")}', this)"
+            class="px-3 py-1.5 rounded-lg bg-slate-700 text-slate-300 text-xs font-semibold active:scale-95">✏️</button>
+          <button onclick="App.adminDeleteCategory(${cat.id}, '${cat.name.replace(/'/g,"\\'")}', this)"
+            class="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold active:scale-95">🗑</button>
+        </div>
+      </div>`;
+    }).join('') || '<p class="text-center text-slate-500 text-sm py-8">Belum ada kategori.</p>';
   };
 
   /** Render form edit link untuk satu kategori */
@@ -111,5 +126,18 @@ const Admin = (() => {
       </div>`).join('');
   };
 
-  return { renderCategories, renderLinkEdit, updateLinkCounter, renderSessions, renderNotifications, renderUsers };
+  /** Render daftar provider internet (admin) */
+  const renderProviders = async () => {
+    const providers = await API.getProviders();
+    document.getElementById('admin-providers-list').innerHTML = providers.map(p => `
+      <div class="glass rounded-xl p-4 flex items-center gap-3">
+        <div class="flex-1 min-w-0">
+          <p class="font-semibold text-sm">${p.name}</p>
+        </div>
+        <button onclick="App.adminDeleteProvider(${p.id}, '${p.name}')"
+          class="px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs font-semibold active:scale-95">🗑 Hapus</button>
+      </div>`).join('') || '<p class="text-center text-slate-500 text-sm py-8">Belum ada provider.</p>';
+  };
+
+  return { renderCategories, renderLinkEdit, updateLinkCounter, renderSessions, renderNotifications, renderUsers, renderProviders };
 })();

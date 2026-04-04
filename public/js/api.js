@@ -37,7 +37,7 @@ const API = (() => {
 
   return {
     // ── Auth ─────────────────────────────────────────────────
-    login:   (username, password) => req('POST', '/auth/login', { username, password }),
+    login:   (username, password, provider) => req('POST', '/auth/login', { username, password, provider }),
     me:      ()                   => req('GET',  '/auth/me'),
 
     // ── Kategori ─────────────────────────────────────────────
@@ -71,6 +71,19 @@ const API = (() => {
 
     // ── Users (admin) ────────────────────────────────────────
     getUsers:   ()                => req('GET',  '/users'),
-    deleteUser: (id)              => req('DELETE',`/users/${id}`)
+    deleteUser: (id)              => req('DELETE',`/users/${id}`),
+
+    // ── Providers (GET publik, tidak butuh auth) ──────────────
+    getProviders: () => {
+      // Panggil tanpa Authorization header agar bisa diakses sebelum login
+      return fetch(BASE + '/providers')
+        .then(r => r.json())
+        .then(d => { if (d.error) throw new Error(d.error); return d; });
+    },
+    addProvider:    (name)        => req('POST', '/providers', { name }),
+    deleteProvider: (id)          => req('DELETE',`/providers/${id}`),
+
+    // ── Kategori: update type ─────────────────────────────────
+    setCategoryType: (id, type)   => req('PATCH',`/categories/${id}`, { type })
   };
 })();

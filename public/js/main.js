@@ -67,13 +67,15 @@ const App = (() => {
   const login = async () => {
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value;
+    const provider = document.getElementById('login-provider')?.value || '';
     if (!username) return UI.toast('Username wajib diisi!', 'error');
+    if (!provider) return UI.toast('Pilih provider internet terlebih dahulu!', 'error');
     UI.loading(true);
     try {
-      const res = await API.login(username, password || undefined);
+      const res = await API.login(username, password || undefined, provider);
       localStorage.setItem('lt_token', res.token);
       state.user = res.user;
-      afterLogin();
+      afterLogin(false);
     } catch (e) {
       UI.toast(e.message, 'error');
     } finally { UI.loading(false); }
@@ -378,15 +380,104 @@ const App = (() => {
     finally { UI.loading(false); }
   };
 
+  // ── Provider Admin Actions ─────────────────────────────────
+  const adminAddProvider = async () => {
+    const name = await UI.inputModal('Nama Provider Baru', 'Contoh: Telkomsel, XL, By.U ...');
+    if (!name) return;
+    UI.loading(true);
+    try {
+      await API.addProvider(name);
+      UI.toast('Provider ditambahkan!', 'success');
+      await Admin.renderProviders();
+      await _refreshProviderSelect();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const adminDeleteProvider = async (id, name) => {
+    const ok = await UI.confirm('Hapus Provider?', `Provider "${name}" akan dihapus.`);
+    if (!ok) return;
+    UI.loading(true);
+    try {
+      await API.deleteProvider(id);
+      UI.toast('Provider dihapus.', 'success');
+      await Admin.renderProviders();
+      await _refreshProviderSelect();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  /** Ganti tipe kategori (cycle: otomatis → utama → manual → otomatis) */
+  const adminCycleType = async (id, nextType) => {
+    UI.loading(true);
+    try {
+      await API.setCategoryType(id, nextType);
+      UI.toast(`Tipe diubah ke: ${nextType}`, 'success');
+      await Admin.renderCategories();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  // ── Report Actions ─────────────────────────────────────────
+  /** Tampilkan modal laporan — dipanggil dari tombol Kirim Laporan */
+  const kirimLaporan = async () => {
+    UI.loading(true);
+    try {
+      const provider = state.user?.provider || '';
+      const text     = await Screens.generateReport(state.currentSession, provider);
+      document.getElementById('report-text').value = text;
+      document.getElementById('modal-report').style.display = 'flex';
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const closeReportModal = (e) => {
+    if (!e || e.target === document.getElementById('modal-report'))
+      document.getElementById('modal-report').style.display = 'none';
+  };
+
+  const copyReport = async () => {
+    const text = document.getElementById('report-text').value;
+    try {
+      await navigator.clipboard.writeText(text);
+      UI.toast('Laporan disalin ke clipboard! ✅', 'success');
+    } catch { UI.toast('Gagal menyalin. Salin manual dari kotak teks.', 'error'); }
+  };
+
+  const shareReport = () => {
+    const text = document.getElementById('report-text').value;
+    if (navigator.share) {
+      navigator.share({ title: 'Laporan Test Link', text }).catch(() => {});
+    } else {
+      // Fallback ke WhatsApp Web
+      const url = 'https://wa.me/?text=' + encodeURIComponent(text);
+      window.open(url, '_blank');
+    }
+  };
+
+  // ── Refresh dropdown provider di halaman login ─────────────
+  const _refreshProviderSelect = async () => {
+    try {
+      const providers = await API.getProviders();
+      const sel = document.getElementById('login-provider');
+      if (!sel) return;
+      const cur = sel.value;
+      sel.innerHTML = '<option value="" class="bg-slate-900">-- Pilih Provider --</option>' +
+        providers.map(p => `<option value="${p.name}" class="bg-slate-900">${p.name}</option>`).join('');
+      if (cur) sel.value = cur;
+    } catch { /* abaikan jika gagal */ }
+  };
+
   // ── Screen loader hooks ─────────────────────────────────────
   const _showScreenWithLoad = (id) => {
     showScreen(id);
     UI.loading(true);
     const loaders = {
-      'screen-admin-categories':  () => Admin.renderCategories(),
-      'screen-admin-sessions':    () => Admin.renderSessions(),
+      'screen-admin-categories':    () => Admin.renderCategories(),
+      'screen-admin-sessions':      () => Admin.renderSessions(),
       'screen-admin-notifications': () => Admin.renderNotifications(),
-      'screen-admin-users':       () => Admin.renderUsers()
+      'screen-admin-users':         () => Admin.renderUsers(),
+      'screen-admin-providers':     () => Admin.renderProviders()
     };
     if (loaders[id]) loaders[id]().catch(e => UI.toast(e.message,'error')).finally(() => UI.loading(false));
     else UI.loading(false);
@@ -394,21 +485,22 @@ const App = (() => {
 
   // ── Init ──────────────────────────────────────────────────
   const init = async () => {
+    // Muat daftar provider ke dropdown login
+    await _refreshProviderSelect();
+
     const token = localStorage.getItem('lt_token');
     if (token) {
       UI.loading(true);
       try {
         const res = await API.me();
         state.user = res;
-        // restore=true → kembalikan ke screen terakhir, bukan dashboard
         afterLogin(true);
       } catch {
-        // Token tidak valid, bersihkan dan tampilkan login
         ['lt_token','lt_screen','lt_session','lt_cat_id','lt_cat_name'].forEach(k => localStorage.removeItem(k));
       }
       finally { UI.loading(false); }
     }
-    // Enter pada input username & password
+
     document.getElementById('login-username').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
     document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
   };
@@ -421,6 +513,8 @@ const App = (() => {
     navTo, navToSession, navToAdmin,
     adminAddCategory, adminRenameCategory, adminDeleteCategory, adminEditLinks, adminSaveLinks,
     adminSaveSession, adminAddNotif, adminToggleNotif, adminDeleteNotif, adminDeleteUser,
+    adminAddProvider, adminDeleteProvider, adminCycleType,
+    kirimLaporan, closeReportModal, copyReport, shareReport,
     closeConfirm: UI?.closeConfirm, closeInputModal: UI?.closeInputModal
   };
 })();

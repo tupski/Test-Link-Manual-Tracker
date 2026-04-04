@@ -21,14 +21,15 @@ const JWT_EXPIRES     = '7d';
  */
 const login = async (req, res, next) => {
   try {
-    const { username, password } = req.body;
+    const { username, password, provider } = req.body;
 
     if (!username || !username.trim()) {
       return res.status(400).json({ error: 'Username wajib diisi.' });
     }
 
     const uname      = username.trim().toLowerCase();
-    const pwdClean   = (password || '').trim(); // trim newline/spasi dari input
+    const pwdClean   = (password || '').trim();
+    const provClean  = (provider || '').trim() || null;
     let role         = 'user';
 
     // --- Cek apakah login sebagai admin ---
@@ -39,26 +40,26 @@ const login = async (req, res, next) => {
       role = 'admin';
     }
 
-    // --- Upsert user ke database ---
+    // --- Upsert user ke database (simpan provider) ---
+    const upsertData = { username: uname, role, last_seen: new Date().toISOString() };
+    if (provClean) upsertData.provider = provClean;
+
     const { data: user, error } = await supabase
       .from('users')
-      .upsert(
-        { username: uname, role, last_seen: new Date().toISOString() },
-        { onConflict: 'username', ignoreDuplicates: false }
-      )
+      .upsert(upsertData, { onConflict: 'username', ignoreDuplicates: false })
       .select()
       .single();
 
     if (error) return next(error);
 
-    // --- Buat JWT ---
+    // --- Buat JWT (sertakan provider untuk dipakai di report) ---
     const token = jwt.sign(
-      { id: user.id, username: user.username, role: user.role },
+      { id: user.id, username: user.username, role: user.role, provider: user.provider },
       JWT_SECRET,
       { expiresIn: JWT_EXPIRES }
     );
 
-    res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
+    res.json({ token, user: { id: user.id, username: user.username, role: user.role, provider: user.provider } });
   } catch (err) {
     next(err);
   }
@@ -72,7 +73,7 @@ const me = async (req, res, next) => {
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select('id, username, role, last_seen, created_at')
+      .select('id, username, role, provider, last_seen, created_at')
       .eq('id', req.user.id)
       .single();
 

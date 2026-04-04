@@ -17,6 +17,7 @@ const { getProgress, markOpened, updateStatus, markAllOpened, resetProgress } = 
 const { getUsers, deleteUser }             = require('../controllers/usersController');
 const { getSessions, updateSession }       = require('../controllers/configController');
 const { getNotifications, getAllNotifications, createNotification, updateNotification, deleteNotification } = require('../controllers/notificationsController');
+const { getProviders, createProvider, deleteProvider } = require('../controllers/providersController');
 
 // ── Auth ─────────────────────────────────────────────────────────────
 router.post('/auth/login', login);
@@ -54,5 +55,11 @@ router.get('/notifications/all',     requireAuth, requireAdmin, getAllNotificati
 router.post('/notifications',        requireAuth, requireAdmin, createNotification);
 router.patch('/notifications/:id',   requireAuth, requireAdmin, updateNotification);
 router.delete('/notifications/:id',  requireAuth, requireAdmin, deleteNotification);
+
+// ── Providers ─────────────────────────────────────────────────────────
+// GET publik (tanpa auth) agar dropdown login bisa tampil sebelum masuk
+router.get('/providers',             getProviders);
+router.post('/providers',            requireAuth, requireAdmin, createProvider);
+router.delete('/providers/:id',      requireAuth, requireAdmin, deleteProvider);
 
 module.exports = router;

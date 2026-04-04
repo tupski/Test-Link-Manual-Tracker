@@ -56,6 +56,22 @@
   </div>
 </div>
 
+<!-- ══════════════════════════════════════════════ MODAL: LAPORAN -->
+<div id="modal-report" class="fixed inset-0 z-[90] hidden items-start justify-center bg-black/60 backdrop-blur-sm px-4 py-8 overflow-y-auto" onclick="App.closeReportModal(event)">
+  <div class="glass rounded-3xl w-full max-w-lg p-5 slide-up" onclick="event.stopPropagation()">
+    <div class="flex items-center justify-between mb-4">
+      <h3 class="text-base font-bold">📋 Laporan Test Link</h3>
+      <button onclick="App.closeReportModal()" class="text-slate-500 text-xl leading-none">✕</button>
+    </div>
+    <textarea id="report-text" readonly rows="14"
+      class="w-full bg-slate-900/80 border border-slate-700 rounded-2xl px-4 py-3 text-white text-xs font-mono resize-none outline-none mb-4"></textarea>
+    <div class="flex gap-3">
+      <button onclick="App.copyReport()" class="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm active:scale-95 transition-all">📋 Salin</button>
+      <button onclick="App.shareReport()" class="flex-1 py-3 rounded-xl bg-emerald-600 text-white font-bold text-sm active:scale-95 transition-all">📤 Bagikan</button>
+    </div>
+  </div>
+</div>
+
 <!-- ══════════════════════════════════════════════ MODAL: KONFIRMASI -->
 <div id="modal-confirm" class="fixed inset-0 z-[90] hidden items-center justify-center bg-black/60 backdrop-blur-sm px-5" onclick="App.closeConfirm(event)">
   <div class="glass rounded-3xl w-full max-w-sm p-6 slide-up" onclick="event.stopPropagation()">
@@ -93,6 +109,14 @@
         <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">Username</label>
         <input id="login-username" type="text" placeholder="Masukkan username..." autocomplete="username"
           class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3.5 text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors text-sm"/>
+      </div>
+      <!-- Pilihan Provider -->
+      <div>
+        <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">Provider Internet</label>
+        <select id="login-provider"
+          class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3.5 text-white outline-none focus:border-indigo-500 transition-colors text-sm appearance-none cursor-pointer">
+          <option value="" class="bg-slate-900">-- Pilih Provider --</option>
+        </select>
       </div>
       <div id="login-admin-section" class="hidden">
         <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">Password Admin</label>
@@ -144,7 +168,15 @@
       <div id="cat-progress-bar" class="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full progress-bar" style="width:0%"></div>
     </div>
   </div>
-  <div id="category-list" class="px-5 space-y-3"></div>
+  <!-- Daftar kategori dikelompokkan per type (dirender oleh screens.js) -->
+  <div id="category-list" class="px-5 space-y-1 pb-2"></div>
+  <!-- Tombol Kirim Laporan — muncul otomatis saat semua selesai -->
+  <div id="btn-kirim-laporan-wrap" class="hidden px-5 pb-28 pt-2">
+    <button onclick="App.kirimLaporan()"
+      class="w-full py-4 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-black text-base shadow-lg shadow-emerald-500/30 active:scale-95 transition-all animate-pulse">
+      📤 Kirim Laporan Sesi
+    </button>
+  </div>
 </div>
 
 <!-- ══════════════════════════════════════════════ SCREEN: LINKS -->
@@ -190,7 +222,23 @@
     <button onclick="App.showScreen('screen-admin-users')" class="glass rounded-2xl p-5 text-left active:scale-95 transition-all">
       <div class="text-2xl mb-2">👥</div><div class="font-bold text-sm">Users</div><div class="text-slate-400 text-xs mt-0.5">Lihat pengguna</div>
     </button>
+    <button onclick="App.showScreen('screen-admin-providers')" class="glass rounded-2xl p-5 text-left active:scale-95 transition-all">
+      <div class="text-2xl mb-2">📡</div><div class="font-bold text-sm">Provider</div><div class="text-slate-400 text-xs mt-0.5">Kelola provider</div>
+    </button>
   </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCREEN: ADMIN PROVIDER -->
+<div id="screen-admin-providers" class="screen gradient-bg pb-28">
+  <div class="glass px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
+    <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center">‹</button>
+    <h2 class="text-base font-bold flex-1">Provider Internet</h2>
+    <button onclick="App.adminAddProvider()" class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white text-xl font-bold">+</button>
+  </div>
+  <div class="px-5 pt-3 pb-2">
+    <p class="text-xs text-slate-500">Daftar provider yang tersedia saat user login. User wajib memilih provider sebelum masuk.</p>
+  </div>
+  <div id="admin-providers-list" class="px-5 pt-1 space-y-2"></div>
 </div>
 
 <!-- ══════════════════════════════════════════════ SCREEN: ADMIN KATEGORI -->

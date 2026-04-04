@@ -7,20 +7,20 @@
 
 const supabase = require('../models/supabase');
 
-/** GET /api/categories — semua kategori + link_count */
+/** GET /api/categories — semua kategori + link_count + type */
 const getCategories = async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('categories')
-      .select('id, name, sort_order, links_updated_at, links(count)')
+      .select('id, name, type, sort_order, links_updated_at, links(count)')
       .order('sort_order', { ascending: true })
       .order('name', { ascending: true });
 
     if (error) return next(error);
 
     const result = data.map(c => ({
-      id: c.id, name: c.name, sort_order: c.sort_order,
-      links_updated_at: c.links_updated_at,
+      id: c.id, name: c.name, type: c.type || 'manual',
+      sort_order: c.sort_order, links_updated_at: c.links_updated_at,
       link_count: c.links[0]?.count ?? 0
     }));
 
@@ -31,14 +31,17 @@ const getCategories = async (req, res, next) => {
 /** POST /api/categories — buat kategori baru (admin) */
 const createCategory = async (req, res, next) => {
   try {
-    const { name } = req.body;
+    const { name, type } = req.body;
     if (!name?.trim()) return res.status(400).json({ error: 'Nama kategori wajib diisi.' });
+
+    const allowed = ['otomatis', 'utama', 'manual'];
+    const catType = allowed.includes(type) ? type : 'manual';
 
     const { data: maxRow } = await supabase.from('categories').select('sort_order').order('sort_order', { ascending: false }).limit(1).single();
     const sort_order = (maxRow?.sort_order ?? -1) + 1;
 
     const { data, error } = await supabase.from('categories')
-      .insert({ name: name.trim(), sort_order })
+      .insert({ name: name.trim(), type: catType, sort_order })
       .select().single();
 
     if (error?.code === '23505') return res.status(409).json({ error: 'Nama kategori sudah ada.' });
@@ -48,15 +51,23 @@ const createCategory = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-/** PATCH /api/categories/:id — rename kategori (admin) */
+/** PATCH /api/categories/:id — rename atau update type kategori (admin) */
 const renameCategory = async (req, res, next) => {
   try {
     const { id } = req.params;
-    const { name } = req.body;
-    if (!name?.trim()) return res.status(400).json({ error: 'Nama kategori tidak boleh kosong.' });
+    const { name, type } = req.body;
+
+    const updates = {};
+    if (name?.trim()) updates.name = name.trim();
+
+    const allowed = ['otomatis', 'utama', 'manual'];
+    if (type && allowed.includes(type)) updates.type = type;
+
+    if (!Object.keys(updates).length)
+      return res.status(400).json({ error: 'Tidak ada field yang diupdate.' });
 
     const { data, error } = await supabase.from('categories')
-      .update({ name: name.trim() })
+      .update(updates)
       .eq('id', id).select().single();
 
     if (error?.code === '23505') return res.status(409).json({ error: 'Nama kategori sudah digunakan.' });
