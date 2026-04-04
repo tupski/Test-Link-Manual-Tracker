@@ -37,10 +37,19 @@ const App = (() => {
 
   const goBack = () => {
     if (state.screenHistory.length > 1) {
+      const leaving = state.screenHistory[state.screenHistory.length - 1];
       state.screenHistory.pop();
-      showScreen(state.screenHistory[state.screenHistory.length - 1], false);
+      const going = state.screenHistory[state.screenHistory.length - 1];
+      showScreen(going, false);
+      // Re-render otomatis agar statistik selalu update
+      if (going === 'screen-categories' && state.currentSession) {
+        Screens.renderCategories(state.currentSession).catch(e => UI.toast(e.message, 'error'));
+      } else if (going === 'screen-dashboard') {
+        loadDashboard();
+      }
     } else {
       showScreen('screen-dashboard', false);
+      loadDashboard();
     }
   };
 
@@ -68,11 +77,15 @@ const App = (() => {
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value;
     const provider = document.getElementById('login-provider')?.value || '';
+    // Admin tidak wajib pilih provider (karena pakai password)
+    const isAdminMode = !!password;
     if (!username) return UI.toast('Username wajib diisi!', 'error');
-    if (!provider) return UI.toast('Pilih provider internet terlebih dahulu!', 'error');
+    if (!provider && !isAdminMode) return UI.toast('Pilih provider internet terlebih dahulu!', 'error');
+    // Simpan pilihan provider terakhir agar diingat saat login berikutnya
+    if (provider) localStorage.setItem('lt_last_provider', provider);
     UI.loading(true);
     try {
-      const res = await API.login(username, password || undefined, provider);
+      const res = await API.login(username, password || undefined, provider || undefined);
       localStorage.setItem('lt_token', res.token);
       state.user = res.user;
       afterLogin(false);
@@ -316,6 +329,81 @@ const App = (() => {
     try { await Screens.renderDashboard(); }
     catch (e) { UI.toast(e.message, 'error'); }
     finally { UI.loading(false); }
+    // Muat info kesiapan di background (tidak perlu tunggu)
+    _loadReadiness().catch(() => {});
+  };
+
+  /**
+   * Muat informasi kesiapan test link:
+   * OS, Browser (dari user-agent), IP, VPN, Lokasi, ISP (dari ipapi).
+   * Berjalan di background — tidak memblok tampilan.
+   */
+  const _loadReadiness = async () => {
+    // OS & Browser dari user-agent
+    const ua = navigator.userAgent;
+    let os = 'Tidak diketahui';
+    if (/Android/i.test(ua)) {
+      const m = ua.match(/Android ([0-9.]+)/);
+      os = `Android ${m ? m[1] : ''}`;
+    } else if (/iPhone|iPad|iPod/i.test(ua)) {
+      const m = ua.match(/OS ([0-9_]+)/);
+      os = `iOS ${m ? m[1].replace(/_/g, '.') : ''}`;
+    } else if (/Windows/i.test(ua)) {
+      os = 'Windows';
+    } else if (/Mac OS/i.test(ua)) {
+      os = 'macOS';
+    } else if (/Linux/i.test(ua)) {
+      os = 'Linux';
+    }
+    let browser = 'Tidak diketahui';
+    if (/Edg\//i.test(ua))         browser = 'Edge';
+    else if (/OPR\//i.test(ua))    browser = 'Opera';
+    else if (/Chrome\//i.test(ua)) { const m = ua.match(/Chrome\/([0-9]+)/); browser = `Chrome ${m?m[1]:''}`; }
+    else if (/Firefox\//i.test(ua)){ const m = ua.match(/Firefox\/([0-9]+)/); browser = `Firefox ${m?m[1]:''}`; }
+    else if (/Safari\//i.test(ua)) browser = 'Safari';
+
+    const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+    setEl('rd-os', os);
+    setEl('rd-browser', browser);
+
+    // Fetch IP + VPN + Lokasi + ISP dari ip-api.com (gratis, no-auth)
+    try {
+      const r   = await fetch('https://ip-api.com/json/?fields=query,country,regionName,city,isp,org,hosting', { cache: 'no-store' });
+      const d   = await r.json();
+      const ip  = d.query || '—';
+      const isp = d.isp || d.org || '—';
+      const loc = [d.city, d.regionName, d.country].filter(Boolean).join(', ') || '—';
+      // Heuristik VPN: jika hosting=true atau org mengandung kata VPN
+      const vpnKeywords = /vpn|proxy|datacenter|hosting|cloud|server|hide|tunnel/i;
+      const isVPN = d.hosting === true || vpnKeywords.test(d.org || '') || vpnKeywords.test(d.isp || '');
+
+      setEl('rd-ip',  ip);
+      setEl('rd-loc', loc);
+      setEl('rd-isp', isp);
+      setEl('rd-vpn', isVPN ? '🛡️ Terdeteksi Aktif' : '✅ Tidak Aktif');
+
+      const vpnEl = document.getElementById('rd-vpn');
+      if (vpnEl) vpnEl.className = `text-xs font-semibold ${isVPN ? 'text-rose-400' : 'text-emerald-400'}`;
+
+      // Badge kesiapan
+      const badge = document.getElementById('readiness-badge');
+      if (badge) {
+        if (isVPN) {
+          badge.textContent = '⚠️ VPN Aktif';
+          badge.className   = 'text-[10px] font-bold px-2 py-0.5 rounded-lg bg-rose-500/20 text-rose-400';
+        } else {
+          badge.textContent = '✅ Siap Test';
+          badge.className   = 'text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-400';
+        }
+      }
+    } catch {
+      setEl('rd-ip',  'Gagal dimuat');
+      setEl('rd-vpn', '?');
+      setEl('rd-loc', '—');
+      setEl('rd-isp', '—');
+      const badge = document.getElementById('readiness-badge');
+      if (badge) { badge.textContent = '—'; badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-700 text-slate-400'; }
+    }
   };
 
   // ── Nav helpers ───────────────────────────────────────────
@@ -532,6 +620,18 @@ const App = (() => {
   // ── Bottom Nav ─────────────────────────────────────────────
   const navTo = (key) => {
     if (key === 'home') { showScreen('screen-dashboard'); loadDashboard(); }
+  };
+
+  /** Navigasi ke screen Panduan Test Link */
+  const navToPanduan = () => {
+    closeProfileDrawer();
+    showScreen('screen-panduan');
+  };
+
+  /** Navigasi ke screen Tentang Aplikasi */
+  const navToTentang = () => {
+    closeProfileDrawer();
+    showScreen('screen-tentang');
   };
   const navToSession = () => {
     // Tampilkan pilihan sesi — buka dashboard lalu scroll ke sesi
@@ -926,8 +1026,9 @@ const App = (() => {
       const providers = await API.getProviders();
       const sel = document.getElementById('login-provider');
       if (!sel) return;
-      const cur = sel.value;
-      sel.innerHTML = '<option value="" class="bg-slate-900">-- Pilih Provider --</option>' +
+      // Ingat pilihan saat ini atau pilihan terakhir dari localStorage
+      const cur  = sel.value || localStorage.getItem('lt_last_provider') || '';
+      sel.innerHTML = '<option value="" class="bg-slate-900">-- Pilih Provider (Opsional Admin) --</option>' +
         providers.map(p => `<option value="${p.name}" class="bg-slate-900">${p.name}</option>`).join('');
       if (cur) sel.value = cur;
     } catch { /* abaikan jika gagal */ }
@@ -950,8 +1051,31 @@ const App = (() => {
     else UI.loading(false);
   };
 
+  // ── Theme toggle (light / dark) ────────────────────────────
+  /** Terapkan tema berdasarkan nilai savednya */
+  const _applyTheme = (isLight) => {
+    const html = document.documentElement;
+    if (isLight) html.classList.add('light');
+    else html.classList.remove('light');
+    const icon  = document.getElementById('theme-icon');
+    const label = document.getElementById('theme-label');
+    if (icon)  icon.textContent  = isLight ? '☀️' : '🌙';
+    if (label) label.textContent = isLight ? 'Terang' : 'Gelap';
+  };
+
+  /** Toggle light/dark mode — simpan preferensi ke localStorage */
+  const toggleTheme = () => {
+    const isLight = !document.documentElement.classList.contains('light');
+    localStorage.setItem('lt_theme', isLight ? 'light' : 'dark');
+    _applyTheme(isLight);
+  };
+
   // ── Init ──────────────────────────────────────────────────
   const init = async () => {
+    // Terapkan tema dari localStorage
+    const savedTheme = localStorage.getItem('lt_theme');
+    _applyTheme(savedTheme === 'light');
+
     // Muat daftar provider ke dropdown login
     await _refreshProviderSelect();
 
@@ -978,6 +1102,7 @@ const App = (() => {
     login, logout, toggleAdminLogin, goBack, showScreen: _showScreenWithLoad,
     openSession, openCategory, openLink, reportStatus, closeStatusModal, markAllDone, resetCategory,
     navTo, navToTestLink, navToSession: navToTestLink, navToAdmin, navToProfile,
+    navToPanduan, navToTentang,
     closeProfileDrawer, openSettings, deleteAccount, showLinkChanges,
     saveUsername, saveProvider, resetAllProgress,
     requestNotification,
@@ -996,6 +1121,7 @@ const App = (() => {
     adminAddProvider, adminDeleteProvider, adminCycleType, adminSetCategoryGroup,
     installPWA, dismissInstall,
     kirimLaporan, closeReportModal, copyReport, shareSignal,
+    toggleTheme,
     closeConfirm: UI?.closeConfirm, closeInputModal: UI?.closeInputModal
   };
 })();

@@ -25,11 +25,12 @@ const UI = (() => {
     document.getElementById('loading').style.display = show ? 'flex' : 'none';
   };
 
-  /** Modal konfirmasi */
-  const confirm = (title, msg, okLabel = 'Lanjutkan', okClass = 'bg-rose-600') => {
+  /** Modal konfirmasi — htmlMode=true agar isi msg dirender sebagai HTML */
+  const confirm = (title, msg, okLabel = 'Lanjutkan', okClass = 'bg-rose-600', htmlMode = false) => {
     return new Promise(resolve => {
       document.getElementById('confirm-title').textContent = title;
-      document.getElementById('confirm-msg').textContent = msg;
+      const msgEl = document.getElementById('confirm-msg');
+      if (htmlMode) msgEl.innerHTML = msg; else msgEl.textContent = msg;
       const okBtn = document.getElementById('confirm-ok');
       okBtn.textContent = okLabel;
       okBtn.className = `flex-1 py-3 rounded-xl ${okClass} text-white font-bold`;

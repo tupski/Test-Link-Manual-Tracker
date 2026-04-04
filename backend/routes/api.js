@@ -19,6 +19,7 @@ const { getSessions, updateSession }        = require('../controllers/configCont
 const { getNotifications, getAllNotifications, createNotification, updateNotification, deleteNotification } = require('../controllers/notificationsController');
 const { getProviders, createProvider, deleteProvider } = require('../controllers/providersController');
 const { getAppConfig, updateAppConfig }     = require('../controllers/appConfigController');
+const { getPublicCategories, getPublicLinks, getPublicSessions, getPublicStats } = require('../controllers/publicController');
 
 // ── Auth ─────────────────────────────────────────────────────────────
 router.post('/auth/login', login);
@@ -69,5 +70,13 @@ router.delete('/providers/:id',      requireAuth, requireAdmin, deleteProvider);
 // ── Config Aplikasi (publik GET, admin PATCH) ─────────────────────────
 router.get('/config/app',            getAppConfig);
 router.patch('/config/app',          requireAuth, requireAdmin, updateAppConfig);
+
+// ── Public API (tanpa auth) — untuk Android automation ───────────────
+// Endpoint read-only, tidak butuh token JWT.
+// Gunakan untuk mengambil data kategori, link, sesi, dan statistik.
+router.get('/public/categories',     getPublicCategories);
+router.get('/public/links/:catId',   getPublicLinks);
+router.get('/public/sessions',       getPublicSessions);
+router.get('/public/stats',          getPublicStats);
 
 module.exports = router;

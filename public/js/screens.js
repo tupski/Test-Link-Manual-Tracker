@@ -48,20 +48,34 @@ const Screens = (() => {
     const progMap      = {};
     progress.forEach(p => { if (!progMap[p.link_id] || p.status !== 'opened') progMap[p.link_id] = p.status; });
 
-    const countNormal  = Object.values(progMap).filter(s => s === 'normal').length;
-    const countError   = Object.values(progMap).filter(s => s === 'error_404').length;
-    const countBlocked = Object.values(progMap).filter(s => s === 'blocked').length;
-    const countOpened  = Object.values(progMap).filter(s => s === 'opened').length;
-    // countDone = countNormal + countError + countBlocked; // (untuk future use)
+    const countNormal    = Object.values(progMap).filter(s => s === 'normal').length;
+    const countError     = Object.values(progMap).filter(s => s === 'error_404').length;
+    const countBlocked   = Object.values(progMap).filter(s => s === 'blocked').length;
+    const countOpened    = Object.values(progMap).filter(s => s === 'opened').length;
     const countUntouched = totalLinks - Object.keys(progMap).length;
 
+    // Hitung progress per tipe kategori
+    const _typeDone = (type) => {
+      const typeCats = cats.filter(c => c.type === type);
+      const total    = typeCats.reduce((a, c) => a + Number(c.link_count), 0);
+      if (!total) return '–';
+      const done = progress.filter(p => typeCats.some(c => c.id === p.category_id)).length;
+      return `${done}/${total}`;
+    };
+
+    // Baris 1: Total | Dibuka | Belum Dibuka
+    // Baris 2: Normal | Error | Diblokir
+    // Baris 3: Progress Otomatis | Utama | Manual
     document.getElementById('dash-stats-grid').innerHTML = [
-      _statCard('Total Link',    totalLinks,           'text-slate-200'),
-      _statCard('✅ Normal',      countNormal,          'text-emerald-400'),
-      _statCard('❌ Error',       countError,           'text-amber-400'),
-      _statCard('🚫 Diblokir',    countBlocked,         'text-rose-400'),
-      _statCard('🔵 Dibuka',      countOpened,          'text-indigo-400'),
-      _statCard('⬜ Belum Buka',  countUntouched,       'text-slate-500'),
+      _statCard('Total Link',      totalLinks,              'text-slate-200'),
+      _statCard('🔵 Dibuka',       countOpened,             'text-indigo-400'),
+      _statCard('⬜ Belum Buka',   countUntouched,          'text-slate-500'),
+      _statCard('✅ Normal',        countNormal,             'text-emerald-400'),
+      _statCard('❌ Error',         countError,              'text-amber-400'),
+      _statCard('🚫 Diblokir',     countBlocked,            'text-rose-400'),
+      _statCard('🤖 Otomatis',     _typeDone('otomatis'),   'text-indigo-400'),
+      _statCard('⭐ Utama',        _typeDone('utama'),      'text-amber-400'),
+      _statCard('🔗 Manual',       _typeDone('manual'),     'text-slate-300'),
     ].join('');
 
     // ── Update link terbaru ───────────────────────────────────────────
@@ -174,9 +188,23 @@ const Screens = (() => {
     ]);
     const sess = sessions.find(s => s.session_name === sessionName) || {};
 
+    // Emoji & label sesi
+    const sessEmoji = { pagi: '🌅', siang: '☀️', malam: '🌙' }[sessionName] || '🕐';
+    const sessLabel = sessionName.charAt(0).toUpperCase() + sessionName.slice(1);
+
+    // Hitung rentang waktu sesi (mulai — selesai berdasarkan max_hours)
+    const startH  = sess.start_hour   ?? 0;
+    const startM  = sess.start_minute ?? 0;
+    const maxH    = sess.max_hours    ?? 2;
+    const endTotal = startH * 60 + startM + maxH * 60;
+    const endH    = Math.floor(endTotal / 60) % 24;
+    const endM    = endTotal % 60;
+    const timeRange = `${UI.formatTime(startH, startM)} – ${UI.formatTime(endH, endM)} WIB`;
+
     // Update header sesi
-    document.getElementById('cat-session-label').textContent = 'Test Link';
-    document.getElementById('cat-session-title').textContent = sessionName.charAt(0).toUpperCase() + sessionName.slice(1);
+    document.getElementById('cat-session-label').textContent = `${sessEmoji} ${sessLabel} · ${timeRange}`;
+    document.getElementById('cat-session-title').textContent = `Test Link`;
+
     const timer   = UI.sessionTimer(sess.start_hour, sess.start_minute, sess.normal_hours, sess.max_hours);
     const timerEl = document.getElementById('cat-timer');
     const tColors = { active:'bg-emerald-500/10 text-emerald-400', overtime:'bg-amber-500/10 text-amber-400', expired:'bg-slate-800 text-slate-500', waiting:'bg-slate-800 text-slate-400' };
@@ -240,23 +268,21 @@ const Screens = (() => {
   };
 
   /**
-   * Cek apakah semua link sudah punya status final (normal/blocked/error_404).
-   * Jika ya, tampilkan tombol Kirim Laporan.
+   * Cek apakah minimal 1 kategori sudah selesai (semua link berstatus final).
+   * Jika ya, tampilkan tombol floating Kirim Laporan di atas bottom nav.
    */
   const _checkCompletion = (cats, progress) => {
-    const btn = document.getElementById('btn-kirim-laporan-wrap');
+    const btn = document.getElementById('btn-kirim-laporan-float');
     if (!btn) return;
     const finalStatuses = new Set(['normal', 'blocked', 'error_404']);
-    let totalLinks = 0;
-    let doneLinks  = 0;
-    cats.forEach(cat => {
+    // Cek apakah ADA SATU kategori yang sudah selesai semua linknya
+    const anyDone = cats.some(cat => {
       const n = Number(cat.link_count);
-      totalLinks += n;
-      // Hitung link kategori ini yang sudah punya status final
-      const catProg = progress.filter(p => p.category_id === cat.id && finalStatuses.has(p.status));
-      doneLinks += Math.min(catProg.length, n);
+      if (n === 0) return false;
+      const catFinal = progress.filter(p => p.category_id === cat.id && finalStatuses.has(p.status));
+      return catFinal.length >= n;
     });
-    btn.classList.toggle('hidden', !(totalLinks > 0 && doneLinks >= totalLinks));
+    btn.classList.toggle('hidden', !anyDone);
   };
 
   /** Render daftar link untuk satu kategori */
