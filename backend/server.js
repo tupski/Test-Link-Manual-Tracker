@@ -37,21 +37,24 @@ app.get('/{*path}', (req, res) => {
 // ── Global error handler ──────────────────────────────────────────────
 app.use(errorHandler);
 
-// ── Start server ──────────────────────────────────────────────────────
-app.listen(PORT, '0.0.0.0', () => {
-  // Tampilkan semua IP lokal agar mudah diakses dari HP
-  const { networkInterfaces } = require('os');
-  const nets = networkInterfaces();
-  const ips  = [];
-
-  for (const iface of Object.values(nets)) {
-    for (const net of iface) {
-      if (net.family === 'IPv4' && !net.internal) ips.push(net.address);
+// ── Jalankan server hanya jika dieksekusi langsung (bukan di Vercel) ──
+// Vercel Serverless membutuhkan module.exports = app, bukan app.listen()
+if (require.main === module) {
+  app.listen(PORT, '0.0.0.0', () => {
+    const { networkInterfaces } = require('os');
+    const nets = networkInterfaces();
+    const ips  = [];
+    for (const iface of Object.values(nets)) {
+      for (const net of iface) {
+        if (net.family === 'IPv4' && !net.internal) ips.push(net.address);
+      }
     }
-  }
+    console.log('\n✅ Link Tester berjalan!');
+    console.log(`   Lokal  : http://localhost:${PORT}`);
+    ips.forEach(ip => console.log(`   Network: http://${ip}:${PORT}  ← buka dari HP`));
+    console.log('');
+  });
+}
 
-  console.log('\n✅ Link Tester berjalan!');
-  console.log(`   Lokal  : http://localhost:${PORT}`);
-  ips.forEach(ip => console.log(`   Network: http://${ip}:${PORT}  ← buka dari HP`));
-  console.log('');
-});
+// Export app untuk Vercel Serverless Function
+module.exports = app;
