@@ -27,3 +27,5 @@ _list.txt
 # Editor
 .vscode/settings.json
 .idea/
+
+.vercel
