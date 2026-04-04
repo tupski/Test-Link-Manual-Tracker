@@ -1,0 +1,25 @@
+# Dependensi Node.js
+node_modules/
+
+# Database SQLite (data lokal, jangan di-commit)
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# Environment variables (rahasia)
+.env
+.env.local
+.env.production
+
+# Log
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/settings.json
+.idea/

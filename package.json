@@ -1,0 +1,20 @@
+{
+  "name": "link-tester",
+  "version": "2.0.0",
+  "description": "Aplikasi pengujian link harian — Node.js + SQLite backend",
+  "main": "backend/server.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "node --watch backend/server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "better-sqlite3": "^12.8.0",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.0",
+    "express": "^5.2.1",
+    "morgan": "^1.10.1"
+  }
+}

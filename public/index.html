@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#185FA5" />
+  <title>Link Tester</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- SCREEN 1 · BERANDA -->
+  <div id="screen-home" class="screen active">
+    <div class="page-header">
+      <h1 class="app-title">🔗 Link Tester</h1>
+      <p id="home-date" class="app-subtitle"></p>
+    </div>
+    <div id="session-banner" class="banner hidden"></div>
+    <p class="section-label">Sesi Hari Ini</p>
+    <div id="session-cards" class="session-cards"></div>
+    <div class="footer-actions">
+      <button class="btn btn-outline full-width" onclick="App.goManage()">⚙️ Kelola Link</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 2 · PILIH KATEGORI -->
+  <div id="screen-category" class="screen">
+    <div class="topbar">
+      <button class="btn-back" onclick="App.goBack()">‹ Kembali</button>
+      <div class="topbar-info">
+        <div id="cat-session-name" class="topbar-title"></div>
+        <div id="cat-session-time" class="topbar-sub"></div>
+      </div>
+    </div>
+    <div class="progress-section pad">
+      <div class="progress-label-row">
+        <span>Progress Sesi</span>
+        <span id="cat-overall-text"></span>
+      </div>
+      <div class="progress-track"><div id="cat-overall-bar" class="progress-fill"></div></div>
+    </div>
+    <div id="category-list" class="list-container"></div>
+  </div>
+
+  <!-- SCREEN 3 · DAFTAR LINK -->
+  <div id="screen-links" class="screen">
+    <div class="topbar">
+      <button class="btn-back" onclick="App.goBack()">‹ Kembali</button>
+      <div class="topbar-info">
+        <div id="links-cat-name" class="topbar-title"></div>
+        <div id="links-progress-text" class="topbar-sub"></div>
+      </div>
+    </div>
+    <div class="progress-section pad">
+      <div class="progress-track"><div id="links-progress-bar" class="progress-fill"></div></div>
+    </div>
+    <div id="links-last-updated" class="last-updated-bar pad"></div>
+    <div id="links-list" class="list-container links-list"></div>
+    <div class="footer-actions stacked">
+      <button class="btn btn-success full-width" onclick="App.markAllDone()">✓ Tandai Semua Selesai</button>
+      <button class="btn btn-ghost full-width" onclick="App.resetCategory()">↺ Reset Kategori Ini</button>
+    </div>
+  </div>
+
+  <!-- SCREEN 4 · KELOLA LINK -->
+  <div id="screen-manage" class="screen">
+    <div class="topbar">
+      <button class="btn-back" onclick="App.goBack()">‹ Kembali</button>
+      <div class="topbar-info">
+        <div class="topbar-title">Kelola Link</div>
+        <div class="topbar-sub">Tap kategori untuk edit link · ✏️ untuk ganti nama</div>
+      </div>
+    </div>
+    <div id="manage-list" class="list-container"></div>
+  </div>
+
+  <!-- SCREEN 5 · EDIT LINK -->
+  <div id="screen-edit" class="screen">
+    <div class="topbar">
+      <button class="btn-back" onclick="App.goBack()">‹ Kembali</button>
+      <div class="topbar-info">
+        <div id="edit-title" class="topbar-title"></div>
+      </div>
+    </div>
+    <div class="edit-container pad">
+      <p class="edit-hint">Satu link per baris. Domain tanpa <code>http</code> akan otomatis ditambah <code>https://</code>.</p>
+      <textarea id="edit-textarea" class="edit-textarea"
+        placeholder="https://example.com&#10;example2.com&#10;www.site.com"></textarea>
+      <p id="edit-counter" class="edit-counter">0 link valid</p>
+      <div class="edit-actions">
+        <button class="btn btn-primary flex-1" onclick="App.saveLinks()">💾 Simpan</button>
+        <button class="btn btn-outline flex-1" onclick="App.goBack()">Batal</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /#app -->
+
+<!-- MODAL · KONFIRMASI BUKA LINK -->
+<div id="modal" class="modal-overlay hidden" onclick="App.handleModalClick(event)">
+  <div class="modal-box">
+    <div class="modal-header">Buka Link?</div>
+    <div id="modal-url" class="modal-url"></div>
+    <div class="modal-actions">
+      <button class="btn btn-outline flex-1" onclick="App.closeModal()">Batal</button>
+      <button class="btn btn-primary flex-1" onclick="App.confirmOpen()">🔗 Buka &amp; Tandai</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL · RENAME KATEGORI -->
+<div id="modal-rename" class="modal-overlay hidden" onclick="App.handleRenameClick(event)">
+  <div class="modal-box">
+    <div class="modal-header">✏️ Ganti Nama Kategori</div>
+    <input id="rename-input" class="rename-input" type="text"
+           placeholder="Nama baru..." maxlength="60"
+           onkeydown="if(event.key==='Enter') App.confirmRename()" />
+    <div class="modal-actions" style="margin-top:16px;">
+      <button class="btn btn-outline flex-1" onclick="App.closeRenameModal()">Batal</button>
+      <button class="btn btn-primary flex-1" onclick="App.confirmRename()">✓ Simpan</button>
+    </div>
+  </div>
+</div>
+
+<!-- TOAST NOTIFIKASI -->
+<div id="toast" class="toast"></div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading" class="loading-overlay hidden">
+  <div class="loading-spinner"></div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
