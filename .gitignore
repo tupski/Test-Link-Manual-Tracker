@@ -20,6 +20,10 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
+# File sementara
+__dirlist.txt
+_list.txt
+
 # Editor
 .vscode/settings.json
 .idea/
