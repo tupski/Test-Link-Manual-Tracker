@@ -102,6 +102,12 @@ const API = (() => {
     // ── Whitelist username (admin only) ───────────────────────
     getWhitelist:          ()         => req('GET',    '/whitelist'),
     addToWhitelist:        (username) => req('POST',   '/whitelist', { username }),
-    removeFromWhitelist:   (id)       => req('DELETE', `/whitelist/${id}`)
+    removeFromWhitelist:   (id)       => req('DELETE', `/whitelist/${id}`),
+
+    // ── Panduan Test Link ──────────────────────────────────────
+    getPanduan:            ()                            => req('GET',    '/panduan'),
+    addPanduan:            (title, content, icon)        => req('POST',   '/panduan', { title, content, icon }),
+    updatePanduan:         (id, title, content, icon)    => req('PATCH',  `/panduan/${id}`, { title, content, icon }),
+    deletePanduan:         (id)                          => req('DELETE', `/panduan/${id}`)
   };
 })();

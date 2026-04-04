@@ -65,9 +65,15 @@ const UI = (() => {
 
       const cleanup = (val) => {
         document.getElementById('modal-input').style.display = 'none';
+        // Hapus handler agar tidak terduplikasi pada pemanggilan berikutnya
+        document.getElementById('input-modal-ok').onclick     = null;
+        document.getElementById('input-modal-cancel').onclick = null;
         resolve(val);
       };
-      document.getElementById('input-modal-ok').onclick = () => cleanup(field.value.trim());
+      // OK → resolve dengan nilai input
+      document.getElementById('input-modal-ok').onclick     = () => cleanup(field.value.trim());
+      // Batal → resolve dengan null (caller harus cek null)
+      document.getElementById('input-modal-cancel').onclick = () => cleanup(null);
     });
   };
 
@@ -120,6 +126,10 @@ App.closeConfirm = (e) => {
     document.getElementById('modal-confirm').style.display = 'none';
 };
 App.closeInputModal = (e) => {
-  if (!e || e.target === document.getElementById('modal-input'))
-    document.getElementById('modal-input').style.display = 'none';
+  if (!e || e.target === document.getElementById('modal-input')) {
+    // Trigger tombol Batal agar Promise ter-resolve dengan null
+    const cancelBtn = document.getElementById('input-modal-cancel');
+    if (cancelBtn && cancelBtn.onclick) cancelBtn.onclick();
+    else document.getElementById('modal-input').style.display = 'none';
+  }
 };

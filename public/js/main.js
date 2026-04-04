@@ -365,33 +365,60 @@ const App = (() => {
     setEl('rd-os', os);
     setEl('rd-browser', browser);
 
-    // Fetch IP + VPN + Lokasi + ISP dari ipapi.co (HTTPS, gratis, no-auth)
-    // Catatan: ip-api.com hanya support HTTP (blocked oleh browser HTTPS policy)
+    // ── Kata kunci ISP Indonesia (partial match) ──────────────
+    // Digunakan untuk konfirmasi koneksi berasal dari provider lokal
+    const INDO_ISP_RE = /telkom|telekomunikasi|xl axiata|xl |indosat|isat|hutchison|tri |smartfren|fren|axis |by\.?u|orbit|myrepublic|firstmedia|first media|cbn |biznet|oxygen|icon\+|mnc|linknet|maxis|iconnet|moratel|lintasarta|centrin|tkdn|gtl|net1|home credit|groovy|cbbn|max telecom/i;
+
+    // Fetch IP + info lokasi dari ipapi.co (HTTPS, gratis)
     try {
-      const r   = await fetch('https://ipapi.co/json/', { cache: 'no-store' });
-      const d   = await r.json();
-      const ip  = d.ip || '—';
-      const isp = d.org || '—';  // ipapi.co: field "org" berisi "AS12345 Nama ISP"
-      const ispDisplay = isp.replace(/^AS\d+\s*/,''); // hapus prefix AS number
-      const loc = [d.city, d.region, d.country_name].filter(Boolean).join(', ') || '—';
-      // Heuristik VPN: jika org mengandung kata VPN/datacenter
-      const vpnKeywords = /vpn|proxy|datacenter|hosting|cloud|server|hide|tunnel|digitalocean|amazon|google|microsoft azure|linode|vultr/i;
-      const isVPN = vpnKeywords.test(d.org || '') || d.asn?.startsWith?.('AS396982');  // Google Cloud etc.
+      const r = await fetch('https://ipapi.co/json/', { cache: 'no-store' });
+      const d = await r.json();
+
+      const ip         = d.ip || '—';
+      const orgRaw     = d.org || '';
+      const ispDisplay = orgRaw.replace(/^AS\d+\s*/i, '').trim() || orgRaw; // hapus prefix ASxxxx
+      const loc        = [d.city, d.region, d.country_name].filter(Boolean).join(', ') || '—';
+      const countryCode = (d.country_code || '').toUpperCase(); // 'ID' = Indonesia
+
+      // ── Logika deteksi utama: berbasis LOKASI ──────────────
+      // Jika country_code bukan 'ID' → koneksi melalui VPN/proxy luar negeri
+      const isOutsideIndo  = countryCode !== 'ID';
+      // Jika di Indonesia, cek ISP → harus cocok provider lokal Indonesia
+      const isKnownIndoISP = INDO_ISP_RE.test(ispDisplay);
+
+      // Status kesiapan: harus di Indonesia + ISP dikenal
+      // Jika ISP tidak cocok tapi lokasi Indonesia → warning saja
+      let readyStatus = 'siap';
+      if (isOutsideIndo)        readyStatus = 'vpn';
+      else if (!isKnownIndoISP) readyStatus = 'isp_unknown';
 
       setEl('rd-ip',  ip);
       setEl('rd-loc', loc);
-      setEl('rd-isp', ispDisplay || isp);
-      setEl('rd-vpn', isVPN ? '🛡️ Terdeteksi Aktif' : '✅ Tidak Aktif');
+      setEl('rd-isp', ispDisplay || '—');
 
       const vpnEl = document.getElementById('rd-vpn');
-      if (vpnEl) vpnEl.className = `text-xs font-semibold ${isVPN ? 'text-rose-400' : 'text-emerald-400'}`;
+      if (vpnEl) {
+        if (isOutsideIndo) {
+          vpnEl.textContent = `🛡️ Aktif (Lokasi: ${d.country_name || countryCode})`;
+          vpnEl.className   = 'text-xs font-semibold text-rose-400';
+        } else {
+          vpnEl.textContent = '✅ Tidak Aktif';
+          vpnEl.className   = 'text-xs font-semibold text-emerald-400';
+        }
+      }
 
-      // Badge kesiapan
+      // ── Badge kesiapan ──────────────────────────────────────
       const badge = document.getElementById('readiness-badge');
       if (badge) {
-        if (isVPN) {
-          badge.textContent = '⚠️ VPN Aktif';
+        if (readyStatus === 'vpn') {
+          badge.textContent = `⚠️ VPN Aktif (${d.country_name || countryCode})`;
           badge.className   = 'text-[10px] font-bold px-2 py-0.5 rounded-lg bg-rose-500/20 text-rose-400';
+        } else if (readyStatus === 'isp_unknown') {
+          badge.textContent = '⚠️ ISP Tidak Dikenal';
+          badge.className   = 'text-[10px] font-bold px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-400';
+          // Tambah note di ISP jika tidak cocok
+          const ispEl = document.getElementById('rd-isp');
+          if (ispEl) { ispEl.title = 'ISP tidak cocok dengan provider Indonesia yang diketahui.'; }
         } else {
           badge.textContent = '✅ Siap Test';
           badge.className   = 'text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-500/20 text-emerald-400';
@@ -705,10 +732,95 @@ const App = (() => {
     if (key === 'home') { showScreen('screen-dashboard'); loadDashboard(); }
   };
 
-  /** Navigasi ke screen Panduan Test Link */
-  const navToPanduan = () => {
+  /** Navigasi ke screen Panduan Test Link + render konten dari DB */
+  const navToPanduan = async () => {
     closeProfileDrawer();
     showScreen('screen-panduan');
+    await renderPanduan();
+    // Tampilkan tombol + hanya untuk admin
+    const addBtn = document.getElementById('panduan-add-btn');
+    if (addBtn) addBtn.classList.toggle('hidden', state.user?.role !== 'admin');
+  };
+
+  /** Render semua item panduan dari database */
+  const renderPanduan = async () => {
+    const container = document.getElementById('panduan-content');
+    if (!container) return;
+    try {
+      const { data } = await API.getPanduan();
+      const isAdmin = state.user?.role === 'admin';
+      container.innerHTML = data.length
+        ? data.map(item => `
+          <div class="glass rounded-2xl p-5" data-panduan-id="${item.id}">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <h3 class="font-bold text-sm flex items-center gap-2">
+                <span>${item.icon || '📌'}</span> ${_escHtml(item.title)}
+              </h3>
+              ${isAdmin ? `<div class="flex gap-1.5 shrink-0">
+                <button onclick="App.adminEditPanduan(${item.id},'${_escAttr(item.icon || '📌')}','${_escAttr(item.title)}','${_escAttr(item.content)}')"
+                  class="text-[10px] px-2 py-1 rounded-lg bg-indigo-500/20 text-indigo-400 font-bold active:scale-95">✏️ Edit</button>
+                <button onclick="App.adminDeletePanduan(${item.id},'${_escAttr(item.title)}')"
+                  class="text-[10px] px-2 py-1 rounded-lg bg-rose-500/20 text-rose-400 font-bold active:scale-95">🗑️</button>
+              </div>` : ''}
+            </div>
+            <p class="text-sm text-slate-300 whitespace-pre-line leading-relaxed">${_escHtml(item.content)}</p>
+          </div>`).join('')
+        : '<div class="glass rounded-2xl p-5 text-center text-slate-500 text-sm">Belum ada panduan. Admin bisa menambahkan melalui tombol +</div>';
+    } catch (e) {
+      if (container) container.innerHTML = '<div class="glass rounded-2xl p-5 text-center text-rose-400 text-sm">Gagal memuat panduan.</div>';
+    }
+  };
+
+  /** Escape HTML untuk render teks aman */
+  const _escHtml = (s) => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  /** Escape untuk atribut HTML (single quote) */
+  const _escAttr = (s) => String(s).replace(/'/g,'\\x27').replace(/\n/g,'\\n');
+
+  // ── Admin: CRUD Panduan ────────────────────────────────────
+  const adminAddPanduan = async () => {
+    const icon = await UI.inputModal('Ikon Panduan', 'Contoh: 📌 📋 🔗', '📌', 'Masukkan emoji ikon:');
+    if (icon === null) return;
+    const title = await UI.inputModal('Judul Panduan', 'Contoh: Cara Test Link...', '', 'Judul:');
+    if (title === null || !title) return;
+    const content = await UI.inputModal('Isi Panduan', 'Tulis langkah-langkah atau penjelasan...', '', 'Isi / Konten (bisa multi-baris):');
+    if (content === null || !content) return;
+    UI.loading(true);
+    try {
+      await API.addPanduan(title, content, icon || '📌');
+      UI.toast('Panduan ditambahkan ✅', 'success');
+      await renderPanduan();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const adminEditPanduan = async (id, curIcon, curTitle, curContent) => {
+    const icon = await UI.inputModal('Ubah Ikon', 'Contoh: 📌 📋 🔗', curIcon, 'Ikon emoji:');
+    if (icon === null) return;
+    const title = await UI.inputModal('Ubah Judul', '', curTitle, 'Judul:');
+    if (title === null || !title) return;
+    // Decode escaped content kembali ke newlines
+    const decodedContent = curContent.replace(/\\n/g, '\n');
+    const content = await UI.inputModal('Ubah Isi', '', decodedContent, 'Isi / Konten:');
+    if (content === null || !content) return;
+    UI.loading(true);
+    try {
+      await API.updatePanduan(id, title, content, icon || '📌');
+      UI.toast('Panduan diperbarui ✅', 'success');
+      await renderPanduan();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const adminDeletePanduan = async (id, title) => {
+    const ok = await UI.confirm('Hapus Panduan?', `"${title}" akan dihapus permanen.`, 'Hapus', 'bg-rose-600');
+    if (!ok) return;
+    UI.loading(true);
+    try {
+      await API.deletePanduan(id);
+      UI.toast('Panduan dihapus ✅', 'success');
+      await renderPanduan();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
   };
 
   /** Navigasi ke screen Tentang Aplikasi */
@@ -879,12 +991,15 @@ const App = (() => {
     finally { UI.loading(false); }
   };
 
-  /** Ganti group_name kategori (Situs / Lainnya) */
+  /** Ganti group_name kategori (Situs / Lainnya) — re-render setelah berhasil */
   const adminSetCategoryGroup = async (id, groupName) => {
+    UI.loading(true);
     try {
       await API.setCategoryGroup(id, groupName);
-      UI.toast(`Grup diubah ke: ${groupName}`, 'success');
+      UI.toast(`Grup diubah ke: ${groupName} ✅`, 'success');
+      await Admin.renderCategories();
     } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
   };
 
   // ── Password user (self-service) ──────────────────────────
@@ -1225,7 +1340,8 @@ const App = (() => {
       'screen-admin-users':         () => Admin.renderUsers(),
       'screen-admin-providers':     () => Admin.renderProviders(),
       'screen-admin-app':           () => Admin.renderAppConfig(),
-      'screen-admin-whitelist':     () => adminRenderWhitelist()
+      'screen-admin-whitelist':     () => adminRenderWhitelist(),
+      'screen-panduan':             () => renderPanduan()
     };
     if (loaders[id]) loaders[id]().catch(e => UI.toast(e.message,'error')).finally(() => UI.loading(false));
     else UI.loading(false);
@@ -1301,6 +1417,7 @@ const App = (() => {
     },
     adminAddProvider, adminDeleteProvider, adminCycleType, adminSetCategoryGroup,
     adminAddWhitelist, adminRemoveWhitelist, adminRenderWhitelist,
+    adminAddPanduan, adminEditPanduan, adminDeletePanduan,
     savePassword, removePassword,
     installPWA, dismissInstall,
     kirimLaporan, closeReportModal, copyReport, shareSignal,

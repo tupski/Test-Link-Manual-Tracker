@@ -22,6 +22,7 @@ const { getAppConfig, updateAppConfig }     = require('../controllers/appConfigC
 const { getPublicCategories, getPublicLinks, getPublicSessions, getPublicStats } = require('../controllers/publicController');
 const { getWhitelist, addToWhitelist, removeFromWhitelist } = require('../controllers/whitelistController');
 const { setMyPassword, removeMyPassword }   = require('../controllers/usersController');
+const { getPanduan, addPanduan, updatePanduan, deletePanduan } = require('../controllers/panduanController');
 
 // ── Auth ─────────────────────────────────────────────────────────────
 router.post('/auth/login', login);
@@ -87,5 +88,11 @@ router.delete('/auth/me/password',   requireAuth, removeMyPassword);
 router.get('/whitelist',             requireAuth, requireAdmin, getWhitelist);
 router.post('/whitelist',            requireAuth, requireAdmin, addToWhitelist);
 router.delete('/whitelist/:id',      requireAuth, requireAdmin, removeFromWhitelist);
+
+// ── Panduan Test Link (GET publik, mutasi admin) ───────────────────────
+router.get('/panduan',               getPanduan);
+router.post('/panduan',              requireAuth, requireAdmin, addPanduan);
+router.patch('/panduan/:id',         requireAuth, requireAdmin, updatePanduan);
+router.delete('/panduan/:id',        requireAuth, requireAdmin, deletePanduan);
 
 module.exports = router;
