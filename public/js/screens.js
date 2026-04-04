@@ -26,10 +26,13 @@ const Screens = (() => {
    * Weather & countdown dikelola oleh main.js (setInterval).
    */
   const renderDashboard = async () => {
-    const today    = UI.todayWIB();
-    const cats     = await API.getCategories();
-    const progress = await API.getProgress(today); // semua sesi
-    const notifs   = await API.getNotifications();
+    const today = UI.todayWIB();
+    // Parallel fetch — ~3x lebih cepat dari sequential await
+    const [cats, progress, notifs] = await Promise.all([
+      API.getCategories(),
+      API.getProgress(today), // semua sesi
+      API.getNotifications()
+    ]);
 
     // Notifikasi admin
     const banner = document.getElementById('notif-banner');
@@ -82,11 +85,14 @@ const Screens = (() => {
    * Render TEST LINK screen — kartu sesi (Pagi/Siang/Malam) + progress per tipe.
    */
   const renderTestLink = async () => {
-    const sessions  = await API.getSessions();
-    const today     = UI.todayWIB();
-    const progress  = await API.getProgress(today);
-    const cats      = await API.getCategories();
-    const notifs    = await API.getNotifications();
+    const today = UI.todayWIB();
+    // Parallel fetch — semua data diambil sekaligus
+    const [sessions, progress, cats, notifs] = await Promise.all([
+      API.getSessions(),
+      API.getProgress(today),
+      API.getCategories(),
+      API.getNotifications()
+    ]);
     const container = document.getElementById('session-cards');
 
     // Notifikasi di test link banner
@@ -159,11 +165,14 @@ const Screens = (() => {
 
   /** Render daftar kategori untuk satu sesi — dikelompokkan per tipe → per group_name */
   const renderCategories = async (sessionName) => {
-    const today    = UI.todayWIB();
-    const cats     = await API.getCategories();
-    const progress = await API.getProgress(today, sessionName);
-    const sessions = await API.getSessions();
-    const sess     = sessions.find(s => s.session_name === sessionName) || {};
+    const today = UI.todayWIB();
+    // Parallel fetch
+    const [cats, progress, sessions] = await Promise.all([
+      API.getCategories(),
+      API.getProgress(today, sessionName),
+      API.getSessions()
+    ]);
+    const sess = sessions.find(s => s.session_name === sessionName) || {};
 
     // Update header sesi
     document.getElementById('cat-session-label').textContent = 'Test Link';

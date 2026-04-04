@@ -704,38 +704,6 @@ const App = (() => {
     } catch (e) { UI.toast(e.message, 'error'); }
   };
 
-  // ── Profile / User Settings ────────────────────────────────
-  /**
-   * Buka screen profil + isi data user.
-   */
-  const navToProfile = async () => {
-    const u = state.user;
-    if (!u) return;
-    // Isi info card
-    const av = document.getElementById('settings-avatar');
-    if (av) av.textContent = u.username.charAt(0).toUpperCase();
-    const unEl = document.getElementById('settings-username-display');
-    if (unEl) unEl.textContent = u.username;
-    const prEl = document.getElementById('settings-provider-display');
-    if (prEl) prEl.textContent = u.provider || 'Belum diset';
-    const roEl = document.getElementById('settings-role-display');
-    if (roEl) roEl.textContent = u.role === 'admin' ? '⚙️ Admin' : '👤 User';
-    // Pre-fill input username
-    const inp = document.getElementById('settings-new-username');
-    if (inp) inp.value = '';
-    // Isi dropdown provider dan pilih yang aktif
-    try {
-      const providers = await API.getProviders();
-      const sel = document.getElementById('settings-provider-select');
-      if (sel) {
-        sel.innerHTML = providers.map(p =>
-          `<option value="${p.name}" ${p.name === u.provider ? 'selected' : ''} class="bg-slate-900">${p.name}</option>`
-        ).join('');
-      }
-    } catch { /* abaikan */ }
-    showScreen('screen-user-settings');
-  };
-
   /** Simpan username baru (PATCH /auth/me) */
   const saveUsername = async () => {
     const newName = document.getElementById('settings-new-username')?.value.trim();
@@ -745,11 +713,11 @@ const App = (() => {
       const res = await API.updateMe({ username: newName });
       localStorage.setItem('lt_token', res.token);
       state.user = res.user;
-      // Refresh tampilan
-      document.getElementById('settings-username-display').textContent = res.user.username;
-      document.getElementById('settings-new-username').value = '';
-      document.getElementById('dash-greeting').textContent = `${_greet()}, ${res.user.username}!`;
-      document.getElementById('dash-avatar').textContent   = res.user.username.charAt(0).toUpperCase();
+      // Refresh tampilan settings — dash-greeting diupdate otomatis oleh _updateWeatherHeader (setInterval 1s)
+      const dispEl = document.getElementById('settings-username-display');
+      if (dispEl) dispEl.textContent = res.user.username;
+      const inpEl  = document.getElementById('settings-new-username');
+      if (inpEl)  inpEl.value = '';
       UI.toast('Username berhasil diubah! ✅', 'success');
     } catch (e) { UI.toast(e.message, 'error'); }
     finally { UI.loading(false); }
@@ -771,10 +739,16 @@ const App = (() => {
     finally { UI.loading(false); }
   };
 
-  /** Helper: salam berdasarkan jam */
+  /**
+   * Helper: salam berdasarkan jam WIB.
+   * Pagi 05-10, Siang 11-14, Sore 15-18, Malam 19-04.
+   */
   const _greet = () => {
-    const h = new Date().getHours();
-    return h < 12 ? 'Selamat Pagi' : h < 17 ? 'Selamat Siang' : 'Selamat Malam';
+    const h = new Date(Date.now() + 7 * 3600000).getUTCHours();
+    if (h >= 5  && h < 11) return 'Selamat Pagi';
+    if (h >= 11 && h < 15) return 'Selamat Siang';
+    if (h >= 15 && h < 19) return 'Selamat Sore';
+    return 'Selamat Malam';
   };
 
   /**

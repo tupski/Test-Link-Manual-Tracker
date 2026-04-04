@@ -4,25 +4,14 @@
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
   <meta name="theme-color" content="#0f172a"/>
+  <meta name="mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
   <title>Test Link Tracker</title>
   <link rel="manifest" href="/manifest.json"/>
   <link rel="apple-touch-icon" href="/icon.svg"/>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    *{-webkit-tap-highlight-color:transparent}
-    body{background:#0f172a;min-height:100dvh}
-    .screen{display:none;flex-direction:column;min-height:100dvh}
-    .screen.active{display:flex}
-    .glass{background:rgba(255,255,255,.05);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08)}
-    .slide-up{animation:slideUp .25s ease}
-    @keyframes slideUp{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
-    .progress-bar{transition:width .4s ease}
-    ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
-    .gradient-bg{background:linear-gradient(135deg,#1e1b4b 0%,#0f172a 50%,#162032 100%)}
-    .btn-active{background:rgba(99,102,241,.2);border-color:rgba(99,102,241,.4)}
-  </style>
+  <!-- Production CSS (built with Tailwind CLI v3 — jangan pakai CDN di production) -->
+  <link rel="stylesheet" href="/css/style.css"/>
 </head>
 <body class="text-white font-sans antialiased">
 
