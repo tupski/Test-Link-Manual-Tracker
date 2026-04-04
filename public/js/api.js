@@ -1,0 +1,64 @@
+/**
+ * public/js/api.js
+ * Layer API — semua fetch call ke backend Express/Supabase.
+ * Otomatis menyertakan JWT token di setiap request.
+ */
+
+const API = (() => {
+  const BASE = '/api';
+
+  /** Ambil token dari localStorage */
+  const token = () => localStorage.getItem('lt_token');
+
+  /** Wrapper fetch dengan auth header */
+  const req = async (method, path, body) => {
+    const opts = {
+      method,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token()}` }
+    };
+    if (body !== undefined) opts.body = JSON.stringify(body);
+    const res = await fetch(BASE + path, opts);
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+    return data;
+  };
+
+  return {
+    // ── Auth ─────────────────────────────────────────────────
+    login:   (username, password) => req('POST', '/auth/login', { username, password }),
+    me:      ()                   => req('GET',  '/auth/me'),
+
+    // ── Kategori ─────────────────────────────────────────────
+    getCategories:  ()            => req('GET',  '/categories'),
+    addCategory:    (name)        => req('POST', '/categories', { name }),
+    renameCategory: (id, name)    => req('PATCH',`/categories/${id}`, { name }),
+    deleteCategory: (id)          => req('DELETE',`/categories/${id}`),
+
+    // ── Link ─────────────────────────────────────────────────
+    getLinks:  (catId)            => req('GET',  `/categories/${catId}/links`),
+    saveLinks: (catId, links)     => req('PUT',  `/categories/${catId}/links`, { links }),
+    deleteLink:(id)               => req('DELETE',`/links/${id}`),
+
+    // ── Progress ─────────────────────────────────────────────
+    getProgress:   (date, session) => req('GET', `/progress?date=${date}${session?`&session=${session}`:''}`),
+    markOpened:    (body)          => req('POST', '/progress', body),
+    updateStatus:  (id, status)    => req('PATCH',`/progress/${id}`, { status }),
+    markAllOpened: (body)          => req('POST', '/progress/mark-all', body),
+    resetProgress: (body)          => req('DELETE','/progress', body),
+
+    // ── Config Sesi ──────────────────────────────────────────
+    getSessions:   ()             => req('GET',  '/config/sessions'),
+    updateSession: (id, data)     => req('PATCH',`/config/sessions/${id}`, data),
+
+    // ── Notifikasi ───────────────────────────────────────────
+    getNotifications:    ()       => req('GET',  '/notifications'),
+    getAllNotifications:  ()       => req('GET',  '/notifications/all'),
+    addNotification:     (data)   => req('POST', '/notifications', data),
+    updateNotification:  (id, d)  => req('PATCH',`/notifications/${id}`, d),
+    deleteNotification:  (id)     => req('DELETE',`/notifications/${id}`),
+
+    // ── Users (admin) ────────────────────────────────────────
+    getUsers:   ()                => req('GET',  '/users'),
+    deleteUser: (id)              => req('DELETE',`/users/${id}`)
+  };
+})();

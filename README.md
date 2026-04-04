@@ -1,30 +1,34 @@
-# 🔗 Test Link Manual Tracker
+# 🔗 Link Tracker v3
 
-Aplikasi web sederhana untuk **pengujian link secara manual** dari HP. Mendukung multi-perangkat melalui database SQLite bersama di server lokal.
+Aplikasi web **PWA mobile-first** untuk pengujian link harian secara manual. Multi-user, multi-device, dengan admin panel lengkap dan tracking per-user.
 
 ---
 
-## ✨ Fitur
+## ✨ Fitur v3.0
 
 | Fitur | Keterangan |
 |---|---|
-| 📱 Mobile-first | Dioptimalkan untuk layar HP, semua tombol ≥ 44px |
-| 🗄️ SQLite Database | Data link & progress tersimpan di server — semua HP dalam satu jaringan berbagi data yang sama |
-| 🕐 Tanggal Diperbarui | Setiap kategori menampilkan kapan link terakhir diupdate |
-| ⏱️ Waktu Tersisa Sesi | Countdown per sesi (normal 2 jam, max 4 jam) dengan indikator overtime |
-| 🗂️ 16 Kategori | 2 kategori utama + 14 kategori situs di urutan tetap |
-| ✏️ Edit Nama Kategori | Ganti nama kategori langsung dari UI tanpa restart |
-| 🔗 Auto-prefix HTTPS | Domain tanpa protokol otomatis ditambah `https://` saat simpan |
-| 3 Sesi Harian | Pagi (10:00), Siang (15:00), Malam (19:00) WIB — progress terpisah per sesi |
+| 📱 PWA | Install ke homescreen HP, support offline |
+| 🎨 Tailwind CSS | Dark glassmorphism theme, eye-catching & mobile-first |
+| 🔐 Auth JWT | User login dengan username, admin dengan password |
+| 👤 Per-User Tracking | Setiap user punya progress tersendiri |
+| 🗃️ Supabase | Database PostgreSQL cloud, data sync semua perangkat |
+| ⚙️ Admin Panel | Kelola kategori, link, jadwal sesi, notifikasi, & users |
+| 🔔 Notifikasi | Banner notifikasi admin tampil di dashboard semua user |
+| 📊 Status Link | Setelah buka link: Normal / Diblokir / Error 404 |
+| ↩️ Reset Harian | Progress reset otomatis tiap 00:00 WIB (berbasis tanggal) |
+| ⏱️ Timer Sesi | Countdown waktu tersisa + overtime indicator |
+| 🧭 Bottom Nav | Floating navigation pill untuk user & admin |
 
 ---
 
 ## 📦 Teknologi
 
-- **Backend**: Node.js 22 LTS + Express 5 + better-sqlite3
-- **Frontend**: Vanilla HTML5 + CSS3 + JavaScript ES6+ (tanpa framework)
-- **Database**: SQLite (file lokal `./data/linktest.db`)
-- **Logging**: Morgan (HTTP request logger)
+- **Backend**: Node.js 22 LTS + Express 5 + @supabase/supabase-js + jsonwebtoken
+- **Frontend**: Tailwind CSS CDN + Vanilla JavaScript ES6+ (SPA, tanpa framework)
+- **Database**: Supabase PostgreSQL (cloud, gratis)
+- **PWA**: Service Worker + Web App Manifest
+- **Auth**: JWT (7 hari) + username-based login
 
 ---
 

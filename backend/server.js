@@ -1,6 +1,6 @@
 /**
  * backend/server.js
- * Entry point server Express — Link Tester v2
+ * Entry point server Express — Link Tester v3 (Supabase + JWT + Tailwind)
  */
 
 'use strict';

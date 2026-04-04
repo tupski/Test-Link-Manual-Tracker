@@ -1,11 +1,11 @@
 /**
  * backend/controllers/linksController.js
- * Logika bisnis untuk manajemen link per kategori.
+ * CRUD link per kategori — menggunakan Supabase PostgreSQL.
  */
 
 'use strict';
 
-const db = require('../models/db');
+const supabase = require('../models/supabase');
 
 /**
  * Normalisasi satu baris URL:
@@ -22,69 +22,54 @@ const normalizeLine = (line) => {
   return `https://${t}`;
 };
 
-/**
- * GET /api/categories/:id/links
- * Mengembalikan array URL untuk satu kategori.
- */
-const getLinks = (req, res, next) => {
+/** GET /api/categories/:id/links — array {id, url} per kategori */
+const getLinks = async (req, res, next) => {
   try {
     const { id } = req.params;
+    const { data, error } = await supabase
+      .from('links')
+      .select('id, url')
+      .eq('category_id', id)
+      .order('id', { ascending: true });
 
-    const cat = db.prepare('SELECT id FROM categories WHERE id = ?').get(id);
-    if (!cat) return res.status(404).json({ error: 'Kategori tidak ditemukan.' });
-
-    const rows = db.prepare(
-      'SELECT url FROM links WHERE category_id = ? ORDER BY id ASC'
-    ).all(id);
-
-    res.json(rows.map(r => r.url));
-  } catch (err) {
-    next(err);
-  }
+    if (error) return next(error);
+    res.json(data);
+  } catch (err) { next(err); }
 };
 
-/**
- * PUT /api/categories/:id/links
- * Replace semua link kategori dengan daftar baru.
- * Body: { links: string[] }
- * Juga memperbarui links_updated_at di tabel categories.
- */
-const saveLinks = (req, res, next) => {
+/** PUT /api/categories/:id/links — replace semua link (admin) */
+const saveLinks = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { links } = req.body;
+    if (!Array.isArray(links)) return res.status(400).json({ error: 'Field "links" harus array.' });
 
-    if (!Array.isArray(links)) {
-      return res.status(400).json({ error: 'Field "links" harus berupa array.' });
-    }
-
-    const cat = db.prepare('SELECT id FROM categories WHERE id = ?').get(id);
-    if (!cat) return res.status(404).json({ error: 'Kategori tidak ditemukan.' });
-
-    // Normalisasi: trim + auto-prefix https://
     const normalized = links.map(normalizeLine).filter(Boolean);
-
     const now = new Date().toISOString();
 
-    const transaction = db.transaction(() => {
-      db.prepare('DELETE FROM links WHERE category_id = ?').run(id);
+    // Hapus semua link lama lalu insert baru
+    await supabase.from('links').delete().eq('category_id', id);
 
-      const insert = db.prepare(
-        'INSERT INTO links (category_id, url) VALUES (?, ?)'
-      );
-      normalized.forEach(url => insert.run(id, url));
+    if (normalized.length > 0) {
+      const rows = normalized.map(url => ({ category_id: Number(id), url }));
+      const { error } = await supabase.from('links').insert(rows);
+      if (error) return next(error);
+    }
 
-      db.prepare(
-        'UPDATE categories SET links_updated_at = ? WHERE id = ?'
-      ).run(now, id);
-    });
-
-    transaction();
+    await supabase.from('categories').update({ links_updated_at: now }).eq('id', id);
 
     res.json({ success: true, count: normalized.length, updated_at: now });
-  } catch (err) {
-    next(err);
-  }
+  } catch (err) { next(err); }
 };
 
-module.exports = { getLinks, saveLinks };
+/** DELETE /api/links/:id — hapus satu link (admin) */
+const deleteLink = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { error } = await supabase.from('links').delete().eq('id', id);
+    if (error) return next(error);
+    res.json({ success: true });
+  } catch (err) { next(err); }
+};
+
+module.exports = { getLinks, saveLinks, deleteLink };

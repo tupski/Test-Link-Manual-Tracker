@@ -1,0 +1,356 @@
+/**
+ * public/js/main.js
+ * App controller utama — navigasi, state, semua action handler.
+ */
+
+const App = (() => {
+  // ── State ─────────────────────────────────────────────────
+  let state = {
+    user:          null,
+    currentSession: null,   // 'pagi' | 'siang' | 'malam'
+    currentCatId:  null,
+    currentCatName: null,
+    pendingLinkId: null,    // link yang baru dibuka, menunggu status report
+    pendingProgId: null,    // progress ID yang perlu diupdate statusnya
+    pendingCatId:  null,
+    screenHistory: [],
+    adminEditCatId: null
+  };
+
+  // ── Screen Navigation ─────────────────────────────────────
+  const showScreen = (id, pushHistory = true) => {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    const el = document.getElementById(id);
+    if (el) el.classList.add('active');
+    if (pushHistory && state.screenHistory.slice(-1)[0] !== id)
+      state.screenHistory.push(id);
+    // Scroll to top
+    window.scrollTo(0, 0);
+  };
+
+  const goBack = () => {
+    if (state.screenHistory.length > 1) {
+      state.screenHistory.pop();
+      showScreen(state.screenHistory[state.screenHistory.length - 1], false);
+    } else {
+      showScreen('screen-dashboard', false);
+    }
+  };
+
+  // ── Auth ──────────────────────────────────────────────────
+  const toggleAdminLogin = (checked) => {
+    document.getElementById('login-admin-section').classList.toggle('hidden', !checked);
+    if (checked) document.getElementById('login-username').value = 'admin';
+    else document.getElementById('login-username').value = '';
+  };
+
+  const login = async () => {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    if (!username) return UI.toast('Username wajib diisi!', 'error');
+    UI.loading(true);
+    try {
+      const res = await API.login(username, password || undefined);
+      localStorage.setItem('lt_token', res.token);
+      state.user = res.user;
+      afterLogin();
+    } catch (e) {
+      UI.toast(e.message, 'error');
+    } finally { UI.loading(false); }
+  };
+
+  const logout = async () => {
+    const ok = await UI.confirm('Keluar?', 'Yakin ingin keluar dari akun ini?', 'Keluar', 'bg-indigo-600');
+    if (!ok) return;
+    localStorage.removeItem('lt_token');
+    state = { user: null, currentSession: null, currentCatId: null, currentCatName: null, pendingLinkId: null, pendingProgId: null, pendingCatId: null, screenHistory: [], adminEditCatId: null };
+    document.getElementById('bottom-nav').classList.add('hidden');
+    document.getElementById('login-username').value = '';
+    document.getElementById('login-password').value = '';
+    document.getElementById('login-is-admin').checked = false;
+    document.getElementById('login-admin-section').classList.add('hidden');
+    state.screenHistory = ['screen-login'];
+    showScreen('screen-login', false);
+  };
+
+  const afterLogin = () => {
+    const u = state.user;
+    // Update greeting
+    const hour = new Date().getHours();
+    const greet = hour < 12 ? 'Selamat Pagi' : hour < 17 ? 'Selamat Siang' : 'Selamat Malam';
+    document.getElementById('dash-greeting').textContent = `${greet}, ${u.username}!`;
+    document.getElementById('dash-date').textContent = new Date().toLocaleDateString('id-ID', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    document.getElementById('dash-avatar').textContent = u.username.charAt(0).toUpperCase();
+    // Tampilkan tombol admin di nav jika admin
+    if (u.role === 'admin') document.getElementById('nav-admin-btn').style.display = 'flex';
+    else document.getElementById('nav-admin-btn').style.display = 'none';
+    document.getElementById('bottom-nav').classList.remove('hidden');
+    state.screenHistory = ['screen-dashboard'];
+    showScreen('screen-dashboard', false);
+    loadDashboard();
+    // Daftarkan service worker
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+  };
+
+  const loadDashboard = async () => {
+    UI.loading(true);
+    try { await Screens.renderDashboard(); }
+    catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  // ── Session & Category Navigation ─────────────────────────
+  const openSession = async (sessionName) => {
+    state.currentSession = sessionName;
+    UI.loading(true);
+    try {
+      await Screens.renderCategories(sessionName);
+      showScreen('screen-categories');
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const openCategory = async (catId, catName) => {
+    state.currentCatId   = catId;
+    state.currentCatName = catName;
+    UI.loading(true);
+    try {
+      await Screens.renderLinks(catId, catName, state.currentSession);
+      showScreen('screen-links');
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  // ── Link Actions ──────────────────────────────────────────
+  const openLink = async (linkId, url, catId, catName, sessionName, progId) => {
+    const today = UI.todayWIB();
+    UI.loading(true);
+    try {
+      let prog;
+      if (!progId) {
+        prog = await API.markOpened({ link_id: linkId, category_id: catId, session_name: sessionName, date: today });
+        progId = prog.id;
+      }
+      state.pendingLinkId = linkId;
+      state.pendingProgId = progId;
+      state.pendingCatId  = catId;
+      window.open(url, '_blank');
+      // Tampilkan modal status setelah jeda singkat
+      setTimeout(() => document.getElementById('modal-status').style.display = 'flex', 600);
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const reportStatus = async (status) => {
+    closeStatusModal();
+    if (!state.pendingProgId) return;
+    UI.loading(true);
+    try {
+      await API.updateStatus(state.pendingProgId, status);
+      UI.toast(`Status: ${status === 'normal' ? '✅ Normal' : status === 'blocked' ? '🚫 Diblokir' : '❌ Error 404'}`, 'success');
+      // Refresh daftar link
+      await Screens.renderLinks(state.currentCatId, state.currentCatName, state.currentSession);
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); state.pendingProgId = null; }
+  };
+
+  const closeStatusModal = (e) => {
+    if (!e || e.target === document.getElementById('modal-status'))
+      document.getElementById('modal-status').style.display = 'none';
+  };
+
+  const markAllDone = async () => {
+    const today = UI.todayWIB();
+    UI.loading(true);
+    try {
+      await API.markAllOpened({ category_id: state.currentCatId, session_name: state.currentSession, date: today });
+      UI.toast('Semua link ditandai selesai!', 'success');
+      await Screens.renderLinks(state.currentCatId, state.currentCatName, state.currentSession);
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const resetCategory = async () => {
+    const ok = await UI.confirm('Reset Progress?', 'Hapus semua progress kategori ini di sesi ini?');
+    if (!ok) return;
+    const today = UI.todayWIB();
+    UI.loading(true);
+    try {
+      await API.resetProgress({ category_id: state.currentCatId, session_name: state.currentSession, date: today });
+      UI.toast('Progress direset.', 'info');
+      await Screens.renderLinks(state.currentCatId, state.currentCatName, state.currentSession);
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  // ── Bottom Nav ─────────────────────────────────────────────
+  const navTo = (key) => {
+    if (key === 'home') { showScreen('screen-dashboard'); loadDashboard(); }
+  };
+  const navToSession = () => {
+    // Tampilkan pilihan sesi — buka dashboard lalu scroll ke sesi
+    showScreen('screen-dashboard');
+    loadDashboard();
+  };
+  const navToAdmin = () => { showScreen('screen-admin'); };
+
+  // ── Admin Actions ──────────────────────────────────────────
+  const adminAddCategory = async () => {
+    const name = await UI.inputModal('Nama Kategori Baru', 'Contoh: JP1234');
+    if (!name) return;
+    UI.loading(true);
+    try {
+      await API.addCategory(name);
+      UI.toast('Kategori ditambahkan!', 'success');
+      await Admin.renderCategories();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const adminRenameCategory = async (id, currentName) => {
+    const name = await UI.inputModal('Ganti Nama Kategori', 'Nama baru...', currentName);
+    if (!name || name === currentName) return;
+    UI.loading(true);
+    try {
+      await API.renameCategory(id, name);
+      UI.toast('Nama diperbarui!', 'success');
+      await Admin.renderCategories();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const adminDeleteCategory = async (id, name) => {
+    const ok = await UI.confirm('Hapus Kategori?', `"${name}" dan semua linknya akan dihapus permanen.`);
+    if (!ok) return;
+    UI.loading(true);
+    try {
+      await API.deleteCategory(id);
+      UI.toast('Kategori dihapus.', 'success');
+      await Admin.renderCategories();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const adminEditLinks = async (catId, catName) => {
+    state.adminEditCatId = catId;
+    document.getElementById('admin-links-title').textContent = catName;
+    UI.loading(true);
+    try {
+      await Admin.renderLinkEdit(catId);
+      showScreen('screen-admin-links');
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const adminSaveLinks = async () => {
+    const ta    = document.getElementById('admin-links-textarea').value;
+    const links = ta.split('\n').map(l => l.trim()).filter(Boolean);
+    UI.loading(true);
+    try {
+      const res = await API.saveLinks(state.adminEditCatId, links);
+      UI.toast(`${res.count} link disimpan!`, 'success');
+      Admin.updateLinkCounter();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const adminSaveSession = async (id) => {
+    const data = {
+      start_hour:   Number(document.getElementById(`sess-h-${id}`).value),
+      start_minute: Number(document.getElementById(`sess-m-${id}`).value),
+      normal_hours: Number(document.getElementById(`sess-n-${id}`).value),
+      max_hours:    Number(document.getElementById(`sess-x-${id}`).value)
+    };
+    UI.loading(true);
+    try {
+      await API.updateSession(id, data);
+      UI.toast('Jadwal diperbarui!', 'success');
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const adminAddNotif = async () => {
+    const title = await UI.inputModal('Judul Notifikasi', 'Contoh: Waktu test pagi!');
+    if (!title) return;
+    UI.loading(true);
+    try {
+      await API.addNotification({ title });
+      UI.toast('Notifikasi ditambahkan!', 'success');
+      await Admin.renderNotifications();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const adminToggleNotif = async (id, isActive) => {
+    try {
+      await API.updateNotification(id, { is_active: isActive });
+      UI.toast(isActive ? 'Notifikasi diaktifkan.' : 'Notifikasi dinonaktifkan.', 'info');
+    } catch (e) { UI.toast(e.message, 'error'); }
+  };
+
+  const adminDeleteNotif = async (id) => {
+    const ok = await UI.confirm('Hapus Notifikasi?', 'Notifikasi ini akan dihapus permanen.');
+    if (!ok) return;
+    UI.loading(true);
+    try {
+      await API.deleteNotification(id);
+      UI.toast('Notifikasi dihapus.', 'success');
+      await Admin.renderNotifications();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  const adminDeleteUser = async (id, username) => {
+    const ok = await UI.confirm('Hapus User?', `User "${username}" akan dihapus beserta semua progressnya.`);
+    if (!ok) return;
+    UI.loading(true);
+    try {
+      await API.deleteUser(id);
+      UI.toast('User dihapus.', 'success');
+      await Admin.renderUsers();
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
+  // ── Screen loader hooks ─────────────────────────────────────
+  const _showScreenWithLoad = (id) => {
+    showScreen(id);
+    UI.loading(true);
+    const loaders = {
+      'screen-admin-categories':  () => Admin.renderCategories(),
+      'screen-admin-sessions':    () => Admin.renderSessions(),
+      'screen-admin-notifications': () => Admin.renderNotifications(),
+      'screen-admin-users':       () => Admin.renderUsers()
+    };
+    if (loaders[id]) loaders[id]().catch(e => UI.toast(e.message,'error')).finally(() => UI.loading(false));
+    else UI.loading(false);
+  };
+
+  // ── Init ──────────────────────────────────────────────────
+  const init = async () => {
+    const token = localStorage.getItem('lt_token');
+    if (token) {
+      UI.loading(true);
+      try {
+        const res = await API.me();
+        state.user = res;
+        afterLogin();
+      } catch { localStorage.removeItem('lt_token'); }
+      finally { UI.loading(false); }
+    }
+    // Enter pada input username
+    document.getElementById('login-username').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+    document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+  };
+
+  document.addEventListener('DOMContentLoaded', init);
+
+  return {
+    login, logout, toggleAdminLogin, goBack, showScreen: _showScreenWithLoad,
+    openSession, openCategory, openLink, reportStatus, closeStatusModal, markAllDone, resetCategory,
+    navTo, navToSession, navToAdmin,
+    adminAddCategory, adminRenameCategory, adminDeleteCategory, adminEditLinks, adminSaveLinks,
+    adminSaveSession, adminAddNotif, adminToggleNotif, adminDeleteNotif, adminDeleteUser,
+    closeConfirm: UI?.closeConfirm, closeInputModal: UI?.closeInputModal
+  };
+})();

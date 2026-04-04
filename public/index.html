@@ -1,136 +1,275 @@
 <!DOCTYPE html>
-<html lang="id">
+<html lang="id" class="dark">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <meta name="theme-color" content="#185FA5" />
-  <title>Link Tester</title>
-  <link rel="stylesheet" href="style.css" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+  <meta name="theme-color" content="#0f172a"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+  <title>Link Tracker</title>
+  <link rel="manifest" href="/manifest.json"/>
+  <link rel="apple-touch-icon" href="/icon.svg"/>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    *{-webkit-tap-highlight-color:transparent}
+    body{background:#0f172a;min-height:100dvh}
+    .screen{display:none;flex-direction:column;min-height:100dvh}
+    .screen.active{display:flex}
+    .glass{background:rgba(255,255,255,.05);backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.08)}
+    .slide-up{animation:slideUp .25s ease}
+    @keyframes slideUp{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+    .progress-bar{transition:width .4s ease}
+    ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+    .gradient-bg{background:linear-gradient(135deg,#1e1b4b 0%,#0f172a 50%,#162032 100%)}
+    .btn-active{background:rgba(99,102,241,.2);border-color:rgba(99,102,241,.4)}
+  </style>
 </head>
-<body>
-<div id="app">
+<body class="text-white font-sans antialiased">
 
-  <!-- SCREEN 1 · BERANDA -->
-  <div id="screen-home" class="screen active">
-    <div class="page-header">
-      <h1 class="app-title">🔗 Link Tester</h1>
-      <p id="home-date" class="app-subtitle"></p>
+<!-- ══════════════════════════════════════════════ TOAST -->
+<div id="toast" class="fixed top-5 left-1/2 -translate-x-1/2 z-[100] pointer-events-none">
+  <div id="toast-text" class="hidden px-5 py-3 rounded-2xl text-sm font-semibold shadow-2xl glass slide-up whitespace-nowrap"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════ LOADING -->
+<div id="loading" class="fixed inset-0 z-[80] hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm">
+  <div class="w-10 h-10 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════ MODAL: STATUS LINK -->
+<div id="modal-status" class="fixed inset-0 z-[90] hidden items-end justify-center bg-black/60 backdrop-blur-sm" onclick="App.closeStatusModal(event)">
+  <div class="glass rounded-t-3xl w-full max-w-md p-6 slide-up" onclick="event.stopPropagation()">
+    <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4"></div>
+    <h3 class="text-lg font-bold mb-1 text-center">Bagaimana link tadi?</h3>
+    <p class="text-slate-400 text-xs text-center mb-5">Pilih status untuk link yang baru dibuka</p>
+    <div class="grid grid-cols-3 gap-3 mb-3">
+      <button onclick="App.reportStatus('normal')" class="flex flex-col items-center gap-2 p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 active:scale-95 transition-all">
+        <span class="text-2xl">✅</span><span class="text-xs font-bold text-emerald-400">Normal</span>
+      </button>
+      <button onclick="App.reportStatus('blocked')" class="flex flex-col items-center gap-2 p-4 rounded-2xl bg-rose-500/10 border border-rose-500/20 active:scale-95 transition-all">
+        <span class="text-2xl">🚫</span><span class="text-xs font-bold text-rose-400">Diblokir</span>
+      </button>
+      <button onclick="App.reportStatus('error_404')" class="flex flex-col items-center gap-2 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 active:scale-95 transition-all">
+        <span class="text-2xl">❌</span><span class="text-xs font-bold text-amber-400">Error 404</span>
+      </button>
     </div>
-    <div id="session-banner" class="banner hidden"></div>
-    <p class="section-label">Sesi Hari Ini</p>
-    <div id="session-cards" class="session-cards"></div>
-    <div class="footer-actions">
-      <button class="btn btn-outline full-width" onclick="App.goManage()">⚙️ Kelola Link</button>
-    </div>
+    <button onclick="App.closeStatusModal()" class="w-full py-3 rounded-xl text-slate-500 text-sm">Lewati</button>
   </div>
+</div>
 
-  <!-- SCREEN 2 · PILIH KATEGORI -->
-  <div id="screen-category" class="screen">
-    <div class="topbar">
-      <button class="btn-back" onclick="App.goBack()">‹ Kembali</button>
-      <div class="topbar-info">
-        <div id="cat-session-name" class="topbar-title"></div>
-        <div id="cat-session-time" class="topbar-sub"></div>
-      </div>
-    </div>
-    <div class="progress-section pad">
-      <div class="progress-label-row">
-        <span>Progress Sesi</span>
-        <span id="cat-overall-text"></span>
-      </div>
-      <div class="progress-track"><div id="cat-overall-bar" class="progress-fill"></div></div>
-    </div>
-    <div id="category-list" class="list-container"></div>
-  </div>
-
-  <!-- SCREEN 3 · DAFTAR LINK -->
-  <div id="screen-links" class="screen">
-    <div class="topbar">
-      <button class="btn-back" onclick="App.goBack()">‹ Kembali</button>
-      <div class="topbar-info">
-        <div id="links-cat-name" class="topbar-title"></div>
-        <div id="links-progress-text" class="topbar-sub"></div>
-      </div>
-    </div>
-    <div class="progress-section pad">
-      <div class="progress-track"><div id="links-progress-bar" class="progress-fill"></div></div>
-    </div>
-    <div id="links-last-updated" class="last-updated-bar pad"></div>
-    <div id="links-list" class="list-container links-list"></div>
-    <div class="footer-actions stacked">
-      <button class="btn btn-success full-width" onclick="App.markAllDone()">✓ Tandai Semua Selesai</button>
-      <button class="btn btn-ghost full-width" onclick="App.resetCategory()">↺ Reset Kategori Ini</button>
-    </div>
-  </div>
-
-  <!-- SCREEN 4 · KELOLA LINK -->
-  <div id="screen-manage" class="screen">
-    <div class="topbar">
-      <button class="btn-back" onclick="App.goBack()">‹ Kembali</button>
-      <div class="topbar-info">
-        <div class="topbar-title">Kelola Link</div>
-        <div class="topbar-sub">Tap kategori untuk edit link · ✏️ untuk ganti nama</div>
-      </div>
-    </div>
-    <div id="manage-list" class="list-container"></div>
-  </div>
-
-  <!-- SCREEN 5 · EDIT LINK -->
-  <div id="screen-edit" class="screen">
-    <div class="topbar">
-      <button class="btn-back" onclick="App.goBack()">‹ Kembali</button>
-      <div class="topbar-info">
-        <div id="edit-title" class="topbar-title"></div>
-      </div>
-    </div>
-    <div class="edit-container pad">
-      <p class="edit-hint">Satu link per baris. Domain tanpa <code>http</code> akan otomatis ditambah <code>https://</code>.</p>
-      <textarea id="edit-textarea" class="edit-textarea"
-        placeholder="https://example.com&#10;example2.com&#10;www.site.com"></textarea>
-      <p id="edit-counter" class="edit-counter">0 link valid</p>
-      <div class="edit-actions">
-        <button class="btn btn-primary flex-1" onclick="App.saveLinks()">💾 Simpan</button>
-        <button class="btn btn-outline flex-1" onclick="App.goBack()">Batal</button>
-      </div>
-    </div>
-  </div>
-
-</div><!-- /#app -->
-
-<!-- MODAL · KONFIRMASI BUKA LINK -->
-<div id="modal" class="modal-overlay hidden" onclick="App.handleModalClick(event)">
-  <div class="modal-box">
-    <div class="modal-header">Buka Link?</div>
-    <div id="modal-url" class="modal-url"></div>
-    <div class="modal-actions">
-      <button class="btn btn-outline flex-1" onclick="App.closeModal()">Batal</button>
-      <button class="btn btn-primary flex-1" onclick="App.confirmOpen()">🔗 Buka &amp; Tandai</button>
+<!-- ══════════════════════════════════════════════ MODAL: KONFIRMASI -->
+<div id="modal-confirm" class="fixed inset-0 z-[90] hidden items-center justify-center bg-black/60 backdrop-blur-sm px-5" onclick="App.closeConfirm(event)">
+  <div class="glass rounded-3xl w-full max-w-sm p-6 slide-up" onclick="event.stopPropagation()">
+    <h3 id="confirm-title" class="text-lg font-bold mb-2"></h3>
+    <p id="confirm-msg" class="text-slate-400 text-sm mb-6"></p>
+    <div class="flex gap-3">
+      <button id="confirm-cancel" onclick="App.closeConfirm()" class="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 font-semibold">Batal</button>
+      <button id="confirm-ok" class="flex-1 py-3 rounded-xl bg-rose-600 text-white font-bold">Lanjutkan</button>
     </div>
   </div>
 </div>
 
-<!-- MODAL · RENAME KATEGORI -->
-<div id="modal-rename" class="modal-overlay hidden" onclick="App.handleRenameClick(event)">
-  <div class="modal-box">
-    <div class="modal-header">✏️ Ganti Nama Kategori</div>
-    <input id="rename-input" class="rename-input" type="text"
-           placeholder="Nama baru..." maxlength="60"
-           onkeydown="if(event.key==='Enter') App.confirmRename()" />
-    <div class="modal-actions" style="margin-top:16px;">
-      <button class="btn btn-outline flex-1" onclick="App.closeRenameModal()">Batal</button>
-      <button class="btn btn-primary flex-1" onclick="App.confirmRename()">✓ Simpan</button>
+<!-- ══════════════════════════════════════════════ MODAL: INPUT -->
+<div id="modal-input" class="fixed inset-0 z-[90] hidden items-center justify-center bg-black/60 backdrop-blur-sm px-5" onclick="App.closeInputModal(event)">
+  <div class="glass rounded-3xl w-full max-w-sm p-6 slide-up" onclick="event.stopPropagation()">
+    <h3 id="input-modal-title" class="text-lg font-bold mb-4"></h3>
+    <input id="input-modal-field" class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors mb-4" type="text"/>
+    <div class="flex gap-3">
+      <button onclick="App.closeInputModal()" class="flex-1 py-3 rounded-xl bg-slate-800 text-slate-300 font-semibold">Batal</button>
+      <button id="input-modal-ok" class="flex-1 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold">Simpan</button>
     </div>
   </div>
 </div>
 
-<!-- TOAST NOTIFIKASI -->
-<div id="toast" class="toast"></div>
-
-<!-- LOADING OVERLAY -->
-<div id="loading" class="loading-overlay hidden">
-  <div class="loading-spinner"></div>
+<!-- ══════════════════════════════════════════════ SCREEN: LOGIN -->
+<div id="screen-login" class="screen active gradient-bg items-center justify-center px-5 py-10">
+  <div class="w-full max-w-sm slide-up">
+    <div class="text-center mb-10">
+      <div class="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-4xl shadow-2xl shadow-indigo-500/30">🔗</div>
+      <h1 class="text-3xl font-black tracking-tight">Link Tracker</h1>
+      <p class="text-slate-400 text-sm mt-1">Monitor link harian Anda</p>
+    </div>
+    <div class="glass rounded-3xl p-6 space-y-4">
+      <div>
+        <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">Username</label>
+        <input id="login-username" type="text" placeholder="Masukkan username..." autocomplete="username"
+          class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3.5 text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors text-sm"/>
+      </div>
+      <div id="login-admin-section" class="hidden">
+        <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 block">Password Admin</label>
+        <input id="login-password" type="password" placeholder="Password admin..."
+          class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3.5 text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors text-sm"/>
+      </div>
+      <label class="flex items-center gap-3 cursor-pointer py-1">
+        <input type="checkbox" id="login-is-admin" class="w-4 h-4 accent-indigo-500" onchange="App.toggleAdminLogin(this.checked)"/>
+        <span class="text-sm text-slate-300">Login sebagai Admin</span>
+      </label>
+      <button onclick="App.login()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-base shadow-lg shadow-indigo-500/30 active:scale-95 transition-all">Masuk →</button>
+    </div>
+  </div>
 </div>
 
-<script src="app.js"></script>
+<!-- ══════════════════════════════════════════════ SCREEN: DASHBOARD -->
+<div id="screen-dashboard" class="screen gradient-bg pb-24">
+  <div class="px-5 pt-6 pb-4">
+    <div class="flex items-center justify-between mb-1">
+      <div><p class="text-slate-400 text-xs" id="dash-date"></p><h2 class="text-xl font-bold" id="dash-greeting"></h2></div>
+      <div class="w-10 h-10 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-lg font-bold" id="dash-avatar"></div>
+    </div>
+  </div>
+  <div id="notif-banner" class="hidden mx-5 mb-4 p-4 rounded-2xl bg-indigo-500/10 border border-indigo-500/20">
+    <div id="notif-content" class="text-sm"></div>
+  </div>
+  <div class="px-5 mb-4">
+    <p class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Sesi Hari Ini</p>
+    <div id="session-cards" class="space-y-3"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCREEN: KATEGORI -->
+<div id="screen-categories" class="screen gradient-bg pb-28">
+  <div class="glass px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
+    <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-300 active:scale-95 transition-all">‹</button>
+    <div class="flex-1">
+      <p id="cat-session-label" class="text-xs text-slate-400"></p>
+      <h2 id="cat-session-title" class="text-base font-bold leading-tight"></h2>
+    </div>
+    <div id="cat-timer" class="text-xs font-semibold px-3 py-1.5 rounded-xl"></div>
+  </div>
+  <div class="px-5 pt-4">
+    <div class="flex justify-between text-xs text-slate-400 mb-1.5"><span>Progress Sesi</span><span id="cat-progress-text"></span></div>
+    <div class="h-2 bg-slate-800 rounded-full overflow-hidden mb-5">
+      <div id="cat-progress-bar" class="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="category-list" class="px-5 space-y-3"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCREEN: LINKS -->
+<div id="screen-links" class="screen gradient-bg pb-32">
+  <div class="glass px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
+    <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-300 active:scale-95 transition-all">‹</button>
+    <div class="flex-1 min-w-0">
+      <p id="links-session-label" class="text-xs text-slate-400"></p>
+      <h2 id="links-cat-name" class="text-base font-bold truncate"></h2>
+    </div>
+    <span id="links-updated" class="text-[10px] text-slate-500 shrink-0"></span>
+  </div>
+  <div class="px-5 pt-3">
+    <div class="flex justify-between text-xs text-slate-400 mb-1.5"><span>Progress</span><span id="links-progress-text"></span></div>
+    <div class="h-2 bg-slate-800 rounded-full overflow-hidden mb-4">
+      <div id="links-progress-bar" class="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full progress-bar" style="width:0%"></div>
+    </div>
+  </div>
+  <div id="links-list" class="px-5 space-y-2.5 mb-4"></div>
+  <div class="px-5 flex gap-3">
+    <button onclick="App.markAllDone()" class="flex-1 py-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-bold text-sm active:scale-95 transition-all">✓ Semua Selesai</button>
+    <button onclick="App.resetCategory()" class="flex-1 py-3.5 rounded-2xl bg-slate-800/80 text-slate-400 font-semibold text-sm active:scale-95 transition-all">↺ Reset</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCREEN: ADMIN -->
+<div id="screen-admin" class="screen gradient-bg pb-24">
+  <div class="px-5 pt-6 pb-4 flex items-center gap-3">
+    <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-300">‹</button>
+    <h2 class="text-xl font-bold flex-1">Admin Panel</h2>
+    <span class="text-xs bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2 py-1 rounded-lg font-semibold">ADMIN</span>
+  </div>
+  <div class="px-5 grid grid-cols-2 gap-3">
+    <button onclick="App.showScreen('screen-admin-categories')" class="glass rounded-2xl p-5 text-left active:scale-95 transition-all">
+      <div class="text-2xl mb-2">🗂️</div><div class="font-bold text-sm">Kategori</div><div class="text-slate-400 text-xs mt-0.5">Kelola kategori</div>
+    </button>
+    <button onclick="App.showScreen('screen-admin-sessions')" class="glass rounded-2xl p-5 text-left active:scale-95 transition-all">
+      <div class="text-2xl mb-2">⏰</div><div class="font-bold text-sm">Jadwal Sesi</div><div class="text-slate-400 text-xs mt-0.5">Atur waktu test</div>
+    </button>
+    <button onclick="App.showScreen('screen-admin-notifications')" class="glass rounded-2xl p-5 text-left active:scale-95 transition-all">
+      <div class="text-2xl mb-2">🔔</div><div class="font-bold text-sm">Notifikasi</div><div class="text-slate-400 text-xs mt-0.5">Kelola pengumuman</div>
+    </button>
+    <button onclick="App.showScreen('screen-admin-users')" class="glass rounded-2xl p-5 text-left active:scale-95 transition-all">
+      <div class="text-2xl mb-2">👥</div><div class="font-bold text-sm">Users</div><div class="text-slate-400 text-xs mt-0.5">Lihat pengguna</div>
+    </button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCREEN: ADMIN KATEGORI -->
+<div id="screen-admin-categories" class="screen gradient-bg pb-28">
+  <div class="glass px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
+    <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center">‹</button>
+    <h2 class="text-base font-bold flex-1">Kelola Kategori</h2>
+    <button onclick="App.adminAddCategory()" class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white text-xl font-bold">+</button>
+  </div>
+  <div id="admin-cat-list" class="px-5 pt-4 space-y-2"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCREEN: ADMIN EDIT LINK -->
+<div id="screen-admin-links" class="screen gradient-bg pb-28">
+  <div class="glass px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
+    <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center">‹</button>
+    <h2 id="admin-links-title" class="text-base font-bold flex-1 truncate"></h2>
+  </div>
+  <div class="px-5 pt-4">
+    <p class="text-xs text-slate-400 mb-3">Satu link per baris. Domain tanpa protokol otomatis dapat <span class="text-indigo-400">https://</span></p>
+    <textarea id="admin-links-textarea" rows="15" class="w-full bg-slate-800/60 border border-slate-700 rounded-2xl px-4 py-3 text-white text-sm placeholder-slate-600 outline-none focus:border-indigo-500 transition-colors font-mono resize-none" placeholder="https://example.com&#10;example2.com"></textarea>
+    <div class="flex justify-between items-center mt-2 mb-4">
+      <span id="admin-links-counter" class="text-xs text-slate-400"></span>
+      <span class="text-xs text-indigo-400">auto https://</span>
+    </div>
+    <button onclick="App.adminSaveLinks()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold active:scale-95 transition-all">💾 Simpan Link</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCREEN: ADMIN SESI -->
+<div id="screen-admin-sessions" class="screen gradient-bg pb-28">
+  <div class="glass px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
+    <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center">‹</button>
+    <h2 class="text-base font-bold flex-1">Jadwal Sesi</h2>
+  </div>
+  <div id="admin-sessions-list" class="px-5 pt-4 space-y-4"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCREEN: ADMIN NOTIFIKASI -->
+<div id="screen-admin-notifications" class="screen gradient-bg pb-28">
+  <div class="glass px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
+    <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center">‹</button>
+    <h2 class="text-base font-bold flex-1">Notifikasi</h2>
+    <button onclick="App.adminAddNotif()" class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white text-xl font-bold">+</button>
+  </div>
+  <div id="admin-notif-list" class="px-5 pt-4 space-y-3"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCREEN: ADMIN USERS -->
+<div id="screen-admin-users" class="screen gradient-bg pb-28">
+  <div class="glass px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
+    <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center">‹</button>
+    <h2 class="text-base font-bold flex-1">Pengguna</h2>
+    <span id="users-count" class="text-xs text-slate-400 font-semibold"></span>
+  </div>
+  <div id="admin-users-list" class="px-5 pt-4 space-y-2"></div>
+</div>
+
+<!-- ══════════════════════════════════════════════ BOTTOM NAV -->
+<nav id="bottom-nav" class="hidden fixed bottom-4 left-0 right-0 px-4 z-50">
+  <div class="glass rounded-2xl p-1.5 flex items-center justify-around max-w-md mx-auto shadow-2xl">
+    <button data-nav="home" onclick="App.navTo('home')" class="nav-btn flex flex-col items-center gap-0.5 px-5 py-2 rounded-xl transition-all">
+      <span class="text-xl">🏠</span><span class="text-[10px] font-semibold text-slate-400">Beranda</span>
+    </button>
+    <button data-nav="session" onclick="App.navToSession()" class="nav-btn flex flex-col items-center gap-0.5 px-5 py-2 rounded-xl transition-all">
+      <span class="text-xl">📋</span><span class="text-[10px] font-semibold text-slate-400">Sesi</span>
+    </button>
+    <button data-nav="admin" onclick="App.navToAdmin()" id="nav-admin-btn" class="nav-btn hidden flex-col items-center gap-0.5 px-5 py-2 rounded-xl transition-all">
+      <span class="text-xl">⚙️</span><span class="text-[10px] font-semibold text-slate-400">Admin</span>
+    </button>
+    <button onclick="App.logout()" class="nav-btn flex flex-col items-center gap-0.5 px-5 py-2 rounded-xl transition-all">
+      <span class="text-xl">👤</span><span class="text-[10px] font-semibold text-slate-400">Keluar</span>
+    </button>
+  </div>
+</nav>
+
+<!-- ══════════════════════════════════════════════ SCRIPTS -->
+<script src="/js/api.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/screens.js"></script>
+<script src="/js/admin.js"></script>
+<script src="/js/main.js"></script>
 </body>
 </html>
