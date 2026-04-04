@@ -9,8 +9,8 @@
 const jwt      = require('jsonwebtoken');
 const supabase = require('../models/supabase');
 
-const JWT_SECRET      = process.env.JWT_SECRET || 'changeme_secret_jwt_2026';
-const ADMIN_PASSWORD  = process.env.ADMIN_PASSWORD || 'admin123';
+const JWT_SECRET      = (process.env.JWT_SECRET || 'changeme_secret_jwt_2026').trim();
+const ADMIN_PASSWORD  = (process.env.ADMIN_PASSWORD || 'Admin@2026!').trim();
 const JWT_EXPIRES     = '7d';
 
 /**
@@ -27,12 +27,13 @@ const login = async (req, res, next) => {
       return res.status(400).json({ error: 'Username wajib diisi.' });
     }
 
-    const uname = username.trim().toLowerCase();
-    let role    = 'user';
+    const uname      = username.trim().toLowerCase();
+    const pwdClean   = (password || '').trim(); // trim newline/spasi dari input
+    let role         = 'user';
 
     // --- Cek apakah login sebagai admin ---
     if (uname === 'admin') {
-      if (!password || password !== ADMIN_PASSWORD) {
+      if (!pwdClean || pwdClean !== ADMIN_PASSWORD) {
         return res.status(401).json({ error: 'Password admin salah.' });
       }
       role = 'admin';
