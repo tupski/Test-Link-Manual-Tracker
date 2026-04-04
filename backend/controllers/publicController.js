@@ -150,14 +150,20 @@ const getMonitorData = async (req, res, next) => {
     }
 
     // ── Ambil semua data yang diperlukan secara paralel ──────
-    const [{ data: rawCats }, { data: prog }, { data: sessions }, { data: users }] = await Promise.all([
-      supabase.from('categories').select('id,name,type,group_name,links(count)'),
+    const [{ data: rawCats }, { data: prog }, { data: sessions }, { data: users }, { data: links }] = await Promise.all([
+      supabase.from('categories').select('id,name,type,group_name,links(count)').order('sort_order'),
       supabase.from('progress').select('link_id,category_id,session_name,status,user_id,updated_at').eq('date', date),
       supabase.from('session_config').select('id,session_name,start_hour,start_minute,normal_hours,max_hours').order('start_hour'),
-      supabase.from('users').select('id,username,provider,last_seen')
+      supabase.from('users').select('id,username,provider,last_seen'),
+      supabase.from('links').select('id,url,category_id').order('sort_order')
     ]);
     const cats  = (rawCats || []).map(c => ({ ...c, link_count: c.links?.[0]?.count ?? 0 }));
     const totalLinks = cats.reduce((a, c) => a + Number(c.link_count), 0);
+    // Map link_id → { url, category_id, domain }
+    const linkMap = Object.fromEntries((links || []).map(l => [l.id, {
+      url: l.url, category_id: l.category_id,
+      domain: l.url.replace(/^https?:\/\//, '').split('/')[0]
+    }]));
 
     // ── Statistik global ─────────────────────────────────────
     const finalS = new Set(['normal','blocked','error_404']);
@@ -208,13 +214,36 @@ const getMonitorData = async (req, res, next) => {
       .sort((a,b) => (b.updated_at||'').localeCompare(a.updated_at||''))
       .slice(0, 50)
       .map(p => ({
-        username:   userMap[p.user_id]?.username || '?',
-        category:   catMap[p.category_id]?.name  || '?',
-        type:       catMap[p.category_id]?.type   || '?',
-        session:    p.session_name,
-        status:     p.status,
-        at:         p.updated_at
+        username:    userMap[p.user_id]?.username  || '?',
+        category:    catMap[p.category_id]?.name   || '?',
+        type:        catMap[p.category_id]?.type    || '?',
+        session:     p.session_name,
+        status:      p.status,
+        at:          p.updated_at,
+        link_domain: linkMap[p.link_id]?.domain    || '?'
       }));
+
+    // ── Progress per kategori + per link ─────────────────────
+    // Digunakan di halaman pantau untuk tampilan detail
+    const cat_links = {};
+    cats.forEach(cat => {
+      const catLinkList = (links || []).filter(l => l.category_id === cat.id);
+      const catProg     = (prog  || []).filter(p => p.category_id === cat.id);
+      cat_links[cat.id] = {
+        name: cat.name, type: cat.type,
+        links: catLinkList.map(l => {
+          // Ambil progress terbaik: prioritaskan status final di atas 'opened'
+          const lProgs = catProg.filter(p => p.link_id === l.id);
+          const best   = lProgs.find(p => finalS.has(p.status)) || lProgs[0];
+          return {
+            domain:   linkMap[l.id]?.domain || '?',
+            status:   best?.status || 'none',
+            at:       best?.updated_at || null,
+            username: best ? (userMap[best.user_id]?.username || '?') : null
+          };
+        })
+      };
+    });
 
     // ── Status sesi saat ini ─────────────────────────────────
     const nowM = (() => { const d = new Date(Date.now()+7*3600000); return d.getUTCHours()*60+d.getUTCMinutes(); })();
@@ -229,7 +258,7 @@ const getMonitorData = async (req, res, next) => {
 
     res.json({ success:true, date, generated_at: new Date().toISOString(),
       config: { monitor_path: cfg.monitor_path || 'pantau', app_name: cfg.app_name || 'Test Link Tracker' },
-      summary, by_type, sessions: sessionStatus, users: userList, recent });
+      summary, by_type, sessions: sessionStatus, users: userList, recent, cat_links });
   } catch (err) { next(err); }
 };
 

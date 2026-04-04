@@ -30,6 +30,12 @@
   .tag-waiting{background:rgba(99,102,241,.15);color:#818cf8}
   .tag-overtime{background:rgba(245,158,11,.15);color:#fbbf24}
   .tag-expired{background:rgba(100,116,139,.15);color:#94a3b8}
+  .link-row{display:flex;align-items:center;gap:8px;padding:.35rem .9rem;border-bottom:1px solid rgba(255,255,255,.035)}
+  .link-row:last-child{border-bottom:none}
+  .link-domain{flex:1;font-size:.7rem;font-family:monospace;color:#cbd5e1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .link-time{font-size:.6rem;color:#64748b;white-space:nowrap;flex-shrink:0}
+  .link-user{font-size:.6rem;color:#6366f1;white-space:nowrap;flex-shrink:0}
+  .cat-header{padding:.6rem .9rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03)}
   .section-title{font-size:.65rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem}
   ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
 </style>
@@ -103,6 +109,15 @@
       <div id="user-rows"></div>
     </div>
 
+    <!-- Progress per Link (accordion) -->
+    <p class="section-title" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer" onclick="toggleLinkSection()">
+      <span>Progress per Link</span>
+      <span id="link-section-toggle" style="font-size:.65rem;color:#6366f1;font-weight:700">▼ Tampilkan</span>
+    </p>
+    <div id="link-section" style="display:none;margin-bottom:1.25rem">
+      <div id="cat-link-rows"></div>
+    </div>
+
     <!-- Aktivitas terbaru -->
     <p class="section-title">Aktivitas Terbaru</p>
     <div class="card" style="overflow:hidden">
@@ -115,10 +130,22 @@
 <script>
 const API_BASE = '/api';
 let pollInterval = null;
+let _lastData    = null;  // cache data terakhir untuk section link
 
 // ── Helpers ───────────────────────────────────────────────────────────
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const el  = id => document.getElementById(id);
+
+// Toggle accordion Progress per Link
+function toggleLinkSection() {
+  const sec = el('link-section');
+  const btn = el('link-section-toggle');
+  if (!sec) return;
+  const isHidden = sec.style.display === 'none';
+  sec.style.display = isHidden ? 'block' : 'none';
+  btn.textContent   = isHidden ? '▲ Sembunyikan' : '▼ Tampilkan';
+  if (isHidden && _lastData?.cat_links) renderCatLinks(_lastData.cat_links);
+}
 const SESS_LABEL  = { pagi:'🌅 Pagi', siang:'🌇 Sore', malam:'🌙 Malam' };
 const STATUS_TAG  = {
   normal:    '<span class="badge tag-normal">✅ Normal</span>',
@@ -126,6 +153,7 @@ const STATUS_TAG  = {
   blocked:   '<span class="badge tag-blocked">🚫 Blokir</span>',
   opened:    '<span class="badge tag-opened">🔵 Dibuka</span>'
 };
+const LINK_STATUS_ICON = { normal:'✅', blocked:'🚫', error_404:'❌', opened:'🔵', none:'⬜' };
 const SESS_TAG = {
   active:   '<span class="badge tag-active">● Aktif</span>',
   waiting:  '<span class="badge tag-waiting">◷ Menunggu</span>',
@@ -156,7 +184,10 @@ async function fetchData() {
     }
     const d = await r.json();
     if (!d.success) { showError(d.error || 'Gagal memuat data.'); return; }
+    _lastData = d;
     render(d);
+    // Jika accordion link sudah terbuka, re-render juga
+    if (el('link-section')?.style.display !== 'none' && d.cat_links) renderCatLinks(d.cat_links);
     el('err-box').style.display = 'none';
     el('main-content').style.display = 'block';
     el('live-dot').style.background = '#22c55e';
@@ -232,20 +263,49 @@ function render(d) {
       }).join('')
     : '<p style="text-align:center;color:#475569;font-size:.8rem;padding:1.5rem 0;margin:0">Belum ada aktivitas hari ini.</p>';
 
-  // Aktivitas terbaru
+  // Aktivitas terbaru — tampilkan domain link
   el('recent-list').innerHTML = (d.recent||[]).length
     ? (d.recent||[]).map(r => {
         const typeM = TYPE_META[r.type] || {icon:'🔗'};
         return `<div class="recent-item">
           <div style="width:28px;height:28px;border-radius:.5rem;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0">${typeM.icon}</div>
           <div style="flex:1;min-width:0">
-            <div style="font-size:.75rem;font-weight:600">@${esc(r.username)} · <span style="color:#94a3b8">${esc(r.category)}</span></div>
+            <div style="font-size:.72rem;font-weight:600">@${esc(r.username)} · <span style="color:#94a3b8">${esc(r.category)}</span></div>
+            <div style="font-size:.65rem;font-family:monospace;color:#818cf8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.link_domain||'?')}</div>
             <div style="font-size:.6rem;color:#64748b">${SESS_LABEL[r.session]||r.session} · ${fmt(r.at)}</div>
           </div>
           <div style="flex-shrink:0">${STATUS_TAG[r.status]||r.status}</div>
         </div>`;
       }).join('')
     : '<p style="text-align:center;color:#475569;font-size:.8rem;padding:1.5rem 0;margin:0">Belum ada aktivitas terbaru.</p>';
+}
+
+// ── Render Progress per Kategori & Link ───────────────────────────────
+const TYPE_ORDER = ['otomatis','utama','manual'];
+function renderCatLinks(catLinks) {
+  const rowsEl = el('cat-link-rows');
+  if (!rowsEl || !catLinks) return;
+  const cats = Object.values(catLinks)
+    .sort((a,b) => TYPE_ORDER.indexOf(a.type) - TYPE_ORDER.indexOf(b.type) || a.name.localeCompare(b.name));
+  if (!cats.length) { rowsEl.innerHTML = '<p style="text-align:center;color:#475569;font-size:.8rem;padding:1rem 0">Belum ada data.</p>'; return; }
+  rowsEl.innerHTML = cats.map(cat => {
+    const tM = TYPE_META[cat.type] || {icon:'🔗', color:'#94a3b8'};
+    const done = (cat.links||[]).filter(l => ['normal','blocked','error_404'].includes(l.status)).length;
+    const total = (cat.links||[]).length;
+    return `<div class="card" style="overflow:hidden;margin-bottom:.5rem">
+      <div class="cat-header">
+        <span style="font-size:.72rem;font-weight:700">${tM.icon} ${esc(cat.name)}</span>
+        <span style="font-size:.65rem;color:#94a3b8">${done}/${total}</span>
+      </div>
+      ${(cat.links||[]).map(l => `
+        <div class="link-row">
+          <span style="font-size:.8rem;flex-shrink:0">${LINK_STATUS_ICON[l.status]||'⬜'}</span>
+          <span class="link-domain">${esc(l.domain)}</span>
+          ${l.at ? `<span class="link-time">${fmt(l.at)}</span>` : ''}
+          ${l.username ? `<span class="link-user">@${esc(l.username)}</span>` : ''}
+        </div>`).join('')}
+    </div>`;
+  }).join('');
 }
 
 // ── Init ──────────────────────────────────────────────────────────────

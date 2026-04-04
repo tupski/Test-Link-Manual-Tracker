@@ -315,48 +315,65 @@ const Screens = (() => {
 
   /** Render daftar link untuk satu kategori */
   const renderLinks = async (catId, catName, sessionName) => {
-    const today    = UI.todayWIB();
-    const links    = await API.getLinks(catId);
-    const progress = await API.getProgress(today, sessionName);
-    const catProg  = progress.filter(p => p.category_id === catId);
-    const cats     = await API.getCategories();
-    const cat      = cats.find(c => c.id === catId) || {};
+    const today = UI.todayWIB();
+    // Parallel fetch — 3x lebih cepat dari sequential await
+    const [links, progress, cats] = await Promise.all([
+      API.getLinks(catId),
+      API.getProgress(today, sessionName),
+      API.getCategories()
+    ]);
+    const catProg = progress.filter(p => p.category_id === catId);
+    const cat     = cats.find(c => c.id === catId) || {};
 
     document.getElementById('links-session-label').textContent = SESS_DISPLAY[sessionName] || sessionName;
     document.getElementById('links-cat-name').textContent      = catName;
     document.getElementById('links-updated').textContent       = cat.links_updated_at ? UI.formatDate(cat.links_updated_at) : '';
 
-    const done = catProg.length;
+    // Hitung hanya status final (bukan opened) untuk progress bar
+    const finalSet = new Set(['normal', 'blocked', 'error_404']);
+    const done  = catProg.filter(p => finalSet.has(p.status)).length;
     const total = links.length;
-    const pct  = total ? Math.round(done / total * 100) : 0;
+    const pct   = total ? Math.round(done / total * 100) : 0;
     document.getElementById('links-progress-text').textContent = `${done}/${total}`;
     document.getElementById('links-progress-bar').style.width  = pct + '%';
 
     const statusIcon = { normal:'✅', blocked:'🚫', error_404:'❌', opened:'🔵' };
-    const statusLabel = { normal:'Normal', blocked:'Diblokir', error_404:'Error 404', opened:'Sudah dibuka' };
-    const statusBg    = { normal:'border-emerald-500/20 bg-emerald-500/5', blocked:'border-rose-500/20 bg-rose-500/5', error_404:'border-amber-500/20 bg-amber-500/5', opened:'border-indigo-500/20 bg-indigo-500/5' };
+    const statusBg   = {
+      normal:    'border-emerald-500/20 bg-emerald-500/5',
+      blocked:   'border-rose-500/20 bg-rose-500/5',
+      error_404: 'border-amber-500/20 bg-amber-500/5',
+      opened:    'border-indigo-500/20 bg-indigo-500/5'
+    };
+    // Format waktu klik (WIB-aware)
+    const fmtTime = dt => dt
+      ? new Date(dt).toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' })
+      : '';
 
     const container = document.getElementById('links-list');
     // data-prog-link dipakai untuk optimistic update di reportStatus
+    // data-opened dipakai untuk auto-scroll ke link pertama yang belum dibuka
     container.innerHTML = links.map(link => {
-      const prog = catProg.find(p => p.link_id === link.id);
-      const s    = prog?.status || 'none';
-      const domain = link.url.replace(/^https?:\/\//,'').split('/')[0];
-      const statusTxt = s !== 'none'
-        ? `<p class="text-[10px] mt-0.5 ${s==='normal'?'text-emerald-400':s==='blocked'?'text-rose-400':s==='error_404'?'text-amber-400':'text-indigo-400'}" data-status-text>${statusIcon[s]} ${statusLabel[s]}</p>`
-        : `<p class="text-[10px] mt-0.5" data-status-text></p>`;
+      const prog   = catProg.find(p => p.link_id === link.id);
+      const s      = prog?.status || 'none';
+      const domain = link.url.replace(/^https?:\/\//, '').split('/')[0];
+      const timeStr = prog?.updated_at ? `🕐 ${fmtTime(prog.updated_at)}` : '';
 
-      return `<div class="glass rounded-xl p-3.5 flex items-center gap-3 ${s !== 'none' ? statusBg[s] || '' : ''}" data-prog-link="${link.id}">
+      return `<div class="glass rounded-xl p-2.5 flex items-center gap-2.5 cursor-pointer active:scale-[.98] transition-all ${s !== 'none' ? (statusBg[s] || '') : 'hover:bg-white/5'}"
+        data-prog-link="${link.id}" ${s !== 'none' ? 'data-opened' : ''}
+        onclick="App.openLink(${link.id}, '${link.url.replace(/'/g, "\\'")}', ${catId}, '${catName.replace(/'/g, "\\'")}', '${sessionName}', '${prog?.id || ''}')">
         <div class="flex-1 min-w-0">
-          <p class="text-xs text-slate-400 font-mono truncate">${domain}</p>
-          ${statusTxt}
+          <p class="text-xs text-slate-200 font-mono truncate">${domain}</p>
+          <p class="text-[10px] text-slate-500 mt-0.5" data-click-time>${timeStr}</p>
         </div>
-        <button data-open-btn onclick="App.openLink(${link.id}, '${link.url.replace(/'/g,"\\'")}', ${catId}, '${catName.replace(/'/g,"\\'")}', '${sessionName}', '${prog?.id||''}')"
-          class="shrink-0 px-4 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-all ${s !== 'none' ? 'bg-slate-700 text-slate-300' : 'bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-500/20'}">
-          ${s !== 'none' ? '↩ Buka Lagi' : 'Buka'}
-        </button>
+        <span class="shrink-0 text-base leading-none" data-status-badge>${s !== 'none' ? (statusIcon[s] || '') : '⬜'}</span>
       </div>`;
     }).join('') || '<p class="text-center text-slate-500 text-sm py-10">Belum ada link di kategori ini.</p>';
+
+    // Auto-scroll ke link pertama yang belum dibuka (setelah DOM dirender)
+    setTimeout(() => {
+      const firstUnopened = container.querySelector('[data-prog-link]:not([data-opened])');
+      if (firstUnopened) firstUnopened.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }, 120);
   };
 
   /**

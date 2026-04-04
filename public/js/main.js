@@ -702,11 +702,16 @@ const App = (() => {
     if (sm) {
       const cardEl = document.querySelector(`[data-prog-link="${state.pendingLinkId}"]`);
       if (cardEl) {
-        cardEl.className = `glass rounded-xl p-3.5 flex items-center gap-3 ${sm.bg}`;
-        const stTxt = cardEl.querySelector('[data-status-text]');
-        if (stTxt) { stTxt.textContent = `${sm.icon} ${sm.label}`; stTxt.className = `text-[10px] mt-0.5 ${sm.cls}`; }
-        const openBtn = cardEl.querySelector('[data-open-btn]');
-        if (openBtn) { openBtn.textContent = '↩ Buka Lagi'; openBtn.className = 'shrink-0 px-4 py-2 rounded-xl text-sm font-semibold active:scale-95 transition-all bg-slate-700 text-slate-300'; }
+        // Update tampilan card ke style compact baru
+        cardEl.className = `glass rounded-xl p-2.5 flex items-center gap-2.5 cursor-pointer active:scale-[.98] transition-all ${sm.bg}`;
+        cardEl.setAttribute('data-opened', '');
+        // Update badge status di kanan
+        const badge = cardEl.querySelector('[data-status-badge]');
+        if (badge) badge.textContent = sm.icon;
+        // Update waktu klik
+        const timeEl = cardEl.querySelector('[data-click-time]');
+        const nowStr = new Date().toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+        if (timeEl) timeEl.textContent = `🕐 ${nowStr}`;
       }
     }
     UI.toast(`${sm?.icon || ''} ${sm?.label || status}`, 'success', 1500);
@@ -898,7 +903,7 @@ const App = (() => {
   /** Perbarui badge notif di bottom nav */
   const _updateNotifBadge = async () => {
     try {
-      const notifs  = await API.getNotifs();
+      const notifs  = await API.getNotifications();
       const active  = notifs.filter(n => n.is_active);
       const unread  = active.filter(n => !_seenNotifIds.has(n.id));
       const badge   = document.getElementById('notif-nav-badge');
@@ -924,7 +929,7 @@ const App = (() => {
     const container = document.getElementById('notif-list-screen');
     if (!container) return;
     try {
-      const notifs = await API.getNotifs();
+      const notifs = await API.getNotifications();
       const active = notifs.filter(n => n.is_active);
       if (!active.length) {
         container.innerHTML = '<p class="text-center text-slate-500 text-sm py-10">🔕 Belum ada notifikasi aktif.</p>';
@@ -936,7 +941,8 @@ const App = (() => {
           { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
         return `<div class="glass rounded-xl p-4 ${isUnread ? 'border border-indigo-500/30' : ''}">
           ${isUnread ? '<span class="text-[9px] font-bold bg-indigo-500 text-white px-1.5 py-0.5 rounded-md mb-1 inline-block">BARU</span>' : ''}
-          <p class="text-sm font-semibold leading-snug">${_escHtml(n.message)}</p>
+          <p class="text-sm font-semibold leading-snug">${_escHtml(n.title || '')}</p>
+          ${n.message ? `<p class="text-xs text-slate-400 mt-0.5">${_escHtml(n.message)}</p>` : ''}
           <p class="text-[10px] text-slate-500 mt-1">${date}</p>
         </div>`;
       }).join('');
@@ -948,7 +954,7 @@ const App = (() => {
   /** Tandai semua notifikasi sebagai sudah dibaca */
   const markAllNotifRead = async () => {
     try {
-      const notifs = await API.getNotifs();
+      const notifs = await API.getNotifications();
       notifs.filter(n => n.is_active).forEach(n => _seenNotifIds.add(n.id));
       localStorage.setItem('lt_seen_notifs', JSON.stringify([..._seenNotifIds]));
       document.getElementById('notif-nav-badge')?.classList.add('hidden');
