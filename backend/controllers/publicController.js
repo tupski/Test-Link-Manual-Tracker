@@ -45,9 +45,9 @@ const getPublicLinks = async (req, res, next) => {
 const getPublicSessions = async (req, res, next) => {
   try {
     const { data, error } = await supabase
-      .from('sessions')
+      .from('session_config')
       .select('id, session_name, start_hour, start_minute, normal_hours, max_hours')
-      .order('start_hour');
+      .order('start_hour', { ascending: true });
     if (error) return next(error);
     res.json({ success: true, data });
   } catch (err) { next(err); }
