@@ -154,20 +154,21 @@ const Screens = (() => {
     const todayDisplay = new Date(Date.now() + 7 * 3600000)
       .toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 
-    // ── Cek apakah semua tipe kategori sudah 100% selesai hari ini ──
+    // ── Cek apakah minimal 1 tipe kategori sudah 100% selesai hari ini ──
     const finalStatuses = new Set(['normal', 'blocked', 'error_404']);
     const _typeAllDone = (type) => {
       const typeCats  = cats.filter(c => c.type === type);
       const typeTotal = typeCats.reduce((a, c) => a + Number(c.link_count), 0);
-      if (!typeTotal) return true; // tipe tidak ada = skip
+      if (!typeTotal) return false; // tipe tidak ada = belum selesai
       const typeDone  = progress.filter(p =>
         typeCats.some(c => c.id === p.category_id) && finalStatuses.has(p.status)
       ).length;
       return typeDone >= typeTotal;
     };
-    const allDone = _typeAllDone('otomatis') && _typeAllDone('utama') && _typeAllDone('manual');
+    // Tombol muncul saat SALAH SATU tipe sudah selesai semua (bukan harus semua tipe)
+    const anyTypeDone = _typeAllDone('otomatis') || _typeAllDone('utama') || _typeAllDone('manual');
     const laporanBtn = document.getElementById('btn-laporan-testlink');
-    if (laporanBtn) laporanBtn.classList.toggle('hidden', !allDone);
+    if (laporanBtn) laporanBtn.classList.toggle('hidden', !anyTypeDone);
 
     container.innerHTML = sessions.map(s => {
       const timer      = UI.sessionTimer(s.start_hour, s.start_minute, s.normal_hours, s.max_hours);

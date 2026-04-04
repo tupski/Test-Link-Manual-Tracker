@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>📡 Pantau Test Link</title>
+<link rel="stylesheet" href="/css/style.css"/>
+<style>
+  body{background:#0f172a;color:#f1f5f9;font-family:system-ui,sans-serif;min-height:100dvh;margin:0}
+  .card{background:rgba(30,41,59,.65);border:1px solid rgba(255,255,255,.08);border-radius:1rem;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:.65rem;font-weight:700}
+  .progress-bar{height:6px;border-radius:999px;background:#1e293b;overflow:hidden}
+  .progress-fill{height:100%;border-radius:999px;transition:width .6s ease}
+  @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.3}}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse-dot 1.5s ease infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .spinning{animation:spin 1s linear infinite}
+  .stat-card{padding:1rem;display:flex;flex-direction:column;gap:4px}
+  .stat-val{font-size:1.75rem;font-weight:900;line-height:1}
+  .stat-lbl{font-size:.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em}
+  .user-row{display:flex;align-items:center;gap:10px;padding:.65rem .9rem;border-radius:.75rem}
+  .user-row:nth-child(even){background:rgba(255,255,255,.03)}
+  .recent-item{padding:.5rem .9rem;display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,.04)}
+  .recent-item:last-child{border-bottom:none}
+  .tag-normal{background:rgba(34,197,94,.15);color:#4ade80}
+  .tag-blocked{background:rgba(239,68,68,.15);color:#f87171}
+  .tag-error{background:rgba(245,158,11,.15);color:#fbbf24}
+  .tag-opened{background:rgba(99,102,241,.15);color:#818cf8}
+  .tag-active{background:rgba(34,197,94,.15);color:#4ade80}
+  .tag-waiting{background:rgba(99,102,241,.15);color:#818cf8}
+  .tag-overtime{background:rgba(245,158,11,.15);color:#fbbf24}
+  .tag-expired{background:rgba(100,116,139,.15);color:#94a3b8}
+  .section-title{font-size:.65rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem}
+  ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+</style>
+</head>
+<body>
+<div id="app" style="max-width:640px;margin:0 auto;padding:.75rem 1rem 4rem">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-top:.5rem">
+    <div>
+      <h1 id="app-name" style="font-size:1.1rem;font-weight:900;margin:0">📡 Pantau Test Link</h1>
+      <p id="header-date" style="font-size:.7rem;color:#64748b;margin:2px 0 0"></p>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="live-dot" id="live-dot" title="Live"></div>
+      <span style="font-size:.65rem;color:#94a3b8" id="last-updated">—</span>
+      <button id="refresh-btn" onclick="fetchData()" title="Refresh"
+        style="background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.3);color:#818cf8;border-radius:.5rem;padding:4px 10px;font-size:.75rem;cursor:pointer;font-weight:700">↻</button>
+    </div>
+  </div>
+
+  <!-- Error / disabled -->
+  <div id="err-box" style="display:none" class="card" style="padding:1.5rem;text-align:center"></div>
+
+  <!-- Main content (hidden until data loaded) -->
+  <div id="main-content" style="display:none">
+
+    <!-- Sesi Cards -->
+    <p class="section-title">Status Sesi</p>
+    <div id="sessions-row" style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:1.25rem"></div>
+
+    <!-- Stats ringkasan baris 1 -->
+    <p class="section-title">Ringkasan Hari Ini</p>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:.5rem">
+      <div class="card stat-card">
+        <div class="stat-val" id="s-total">—</div><div class="stat-lbl">Total Link</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-val" id="s-done" style="color:#4ade80">—</div><div class="stat-lbl">Selesai</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-val" id="s-pct" style="color:#818cf8">—%</div><div class="stat-lbl">Progress</div>
+      </div>
+    </div>
+    <!-- Progress bar global -->
+    <div class="progress-bar" style="margin-bottom:1rem">
+      <div class="progress-fill" id="global-bar" style="width:0%;background:linear-gradient(90deg,#6366f1,#22c55e)"></div>
+    </div>
+    <!-- Stats baris 2 -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem;margin-bottom:1.25rem">
+      <div class="card stat-card">
+        <div class="stat-val" id="s-normal" style="color:#4ade80">—</div><div class="stat-lbl">✅ Normal</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-val" id="s-error" style="color:#fbbf24">—</div><div class="stat-lbl">❌ Error</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-val" id="s-blocked" style="color:#f87171">—</div><div class="stat-lbl">🚫 Diblokir</div>
+      </div>
+    </div>
+
+    <!-- Progress per tipe -->
+    <p class="section-title">Progress per Tipe</p>
+    <div class="card" style="padding:.9rem;margin-bottom:1.25rem">
+      <div id="by-type-rows" style="display:flex;flex-direction:column;gap:.6rem"></div>
+    </div>
+
+    <!-- Progress per user -->
+    <p class="section-title">Progress per Peserta</p>
+    <div class="card" style="overflow:hidden;margin-bottom:1.25rem">
+      <div id="user-rows"></div>
+    </div>
+
+    <!-- Aktivitas terbaru -->
+    <p class="section-title">Aktivitas Terbaru</p>
+    <div class="card" style="overflow:hidden">
+      <div id="recent-list"></div>
+    </div>
+
+  </div><!-- /main-content -->
+</div>
+
+<script>
+const API_BASE = '/api';
+let pollInterval = null;
+
+// ── Helpers ───────────────────────────────────────────────────────────
+const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const el  = id => document.getElementById(id);
+const SESS_LABEL  = { pagi:'🌅 Pagi', siang:'🌇 Sore', malam:'🌙 Malam' };
+const STATUS_TAG  = {
+  normal:    '<span class="badge tag-normal">✅ Normal</span>',
+  error_404: '<span class="badge tag-error">❌ Error</span>',
+  blocked:   '<span class="badge tag-blocked">🚫 Blokir</span>',
+  opened:    '<span class="badge tag-opened">🔵 Dibuka</span>'
+};
+const SESS_TAG = {
+  active:   '<span class="badge tag-active">● Aktif</span>',
+  waiting:  '<span class="badge tag-waiting">◷ Menunggu</span>',
+  overtime: '<span class="badge tag-overtime">⚡ Overtime</span>',
+  expired:  '<span class="badge tag-expired">— Selesai</span>'
+};
+const fmt = dt => {
+  if (!dt) return '—';
+  return new Date(dt).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+};
+const TYPE_META = {
+  otomatis: { icon:'🤖', label:'Otomatis', color:'#818cf8' },
+  utama:    { icon:'⭐', label:'Utama',    color:'#fbbf24' },
+  manual:   { icon:'🔗', label:'Manual',   color:'#94a3b8' }
+};
+
+// ── Fetch & Render ────────────────────────────────────────────────────
+async function fetchData() {
+  const btn = el('refresh-btn');
+  if (btn) btn.classList.add('spinning');
+  el('live-dot').style.background = '#f59e0b';
+  try {
+    const r = await fetch(`${API_BASE}/public/monitor?_=${Date.now()}`, { cache:'no-store' });
+    if (!r.ok) {
+      const d = await r.json().catch(()=>({}));
+      showError(d.error || `HTTP ${r.status}`);
+      return;
+    }
+    const d = await r.json();
+    if (!d.success) { showError(d.error || 'Gagal memuat data.'); return; }
+    render(d);
+    el('err-box').style.display = 'none';
+    el('main-content').style.display = 'block';
+    el('live-dot').style.background = '#22c55e';
+    el('last-updated').textContent   = `Diperbarui ${fmt(d.generated_at)}`;
+    if (d.config?.app_name) el('app-name').textContent = `📡 ${d.config.app_name}`;
+  } catch(e) { showError('Koneksi gagal: ' + e.message); }
+  finally { if(btn) btn.classList.remove('spinning'); }
+}
+
+function showError(msg) {
+  el('err-box').innerHTML = `<p style="color:#f87171;font-size:.9rem;margin:0">⚠️ ${esc(msg)}</p>`;
+  el('err-box').style.display = 'block';
+  el('main-content').style.display = 'none';
+  el('live-dot').style.background = '#ef4444';
+}
+
+function render(d) {
+  // Tanggal header
+  const [y,m,day] = d.date.split('-');
+  el('header-date').textContent = new Date(d.date+'T00:00:00').toLocaleDateString('id-ID',
+    {weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  // Sesi
+  el('sessions-row').innerHTML = (d.sessions||[]).map(s => `
+    <div class="card" style="padding:.65rem .75rem;text-align:center">
+      <div style="font-size:.7rem;font-weight:700;margin-bottom:4px">${SESS_LABEL[s.name]||s.name}</div>
+      <div>${SESS_TAG[s.status]||''}</div>
+      <div style="font-size:.6rem;color:#64748b;margin-top:4px">${s.start_hour.toString().padStart(2,'0')}:${(s.start_minute||0).toString().padStart(2,'0')} WIB</div>
+    </div>`).join('');
+
+  // Summary stats
+  const sm = d.summary||{};
+  el('s-total').textContent = sm.total_links ?? '—';
+  el('s-done').textContent  = sm.done        ?? '—';
+  el('s-pct').textContent   = (sm.progress_pct ?? 0) + '%';
+  el('s-normal').textContent  = sm.normal  ?? '—';
+  el('s-error').textContent   = sm.error   ?? '—';
+  el('s-blocked').textContent = sm.blocked ?? '—';
+  el('global-bar').style.width = (sm.progress_pct||0) + '%';
+
+  // Per tipe
+  el('by-type-rows').innerHTML = ['otomatis','utama','manual'].map(type => {
+    const t   = d.by_type?.[type] || {total:0,done:0,pct:0};
+    const m2  = TYPE_META[type];
+    return `<div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+        <span style="font-size:.75rem;font-weight:600">${m2.icon} ${m2.label}</span>
+        <span style="font-size:.7rem;color:#94a3b8">${t.done}/${t.total} · <strong style="color:${m2.color}">${t.pct}%</strong></span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${t.pct}%;background:${m2.color}"></div></div>
+    </div>`;
+  }).join('');
+
+  // Per user
+  el('user-rows').innerHTML = (d.users||[]).length
+    ? (d.users||[]).map((u,i) => {
+        const pct = u.total ? Math.round(u.done/u.total*100) : 0;
+        const initials = (u.username||'?').slice(0,2).toUpperCase();
+        return `<div class="user-row">
+          <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#a855f7);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:900;flex-shrink:0">${initials}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.8rem;font-weight:700">@${esc(u.username)}</div>
+            <div style="font-size:.65rem;color:#94a3b8">${esc(u.provider)} · Aktif ${fmt(u.last_active)}</div>
+            <div class="progress-bar" style="margin-top:4px">
+              <div class="progress-fill" style="width:${pct}%;background:#6366f1"></div>
+            </div>
+          </div>
+          <div style="text-align:right;flex-shrink:0">
+            <div style="font-size:.85rem;font-weight:900;color:#818cf8">${pct}%</div>
+            <div style="font-size:.6rem;color:#475569">${u.done}/${u.total}</div>
+          </div>
+        </div>`;
+      }).join('')
+    : '<p style="text-align:center;color:#475569;font-size:.8rem;padding:1.5rem 0;margin:0">Belum ada aktivitas hari ini.</p>';
+
+  // Aktivitas terbaru
+  el('recent-list').innerHTML = (d.recent||[]).length
+    ? (d.recent||[]).map(r => {
+        const typeM = TYPE_META[r.type] || {icon:'🔗'};
+        return `<div class="recent-item">
+          <div style="width:28px;height:28px;border-radius:.5rem;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0">${typeM.icon}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.75rem;font-weight:600">@${esc(r.username)} · <span style="color:#94a3b8">${esc(r.category)}</span></div>
+            <div style="font-size:.6rem;color:#64748b">${SESS_LABEL[r.session]||r.session} · ${fmt(r.at)}</div>
+          </div>
+          <div style="flex-shrink:0">${STATUS_TAG[r.status]||r.status}</div>
+        </div>`;
+      }).join('')
+    : '<p style="text-align:center;color:#475569;font-size:.8rem;padding:1.5rem 0;margin:0">Belum ada aktivitas terbaru.</p>';
+}
+
+// ── Init ──────────────────────────────────────────────────────────────
+(async () => {
+  await fetchData();
+  // Auto-refresh setiap 10 detik
+  pollInterval = setInterval(fetchData, 10_000);
+  // Pause polling saat tab tidak aktif, resume saat aktif
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) { clearInterval(pollInterval); pollInterval = null; }
+    else { fetchData(); pollInterval = setInterval(fetchData, 10_000); }
+  });
+})();
+</script>
+</body>
+</html>

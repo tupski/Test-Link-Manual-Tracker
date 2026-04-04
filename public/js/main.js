@@ -328,8 +328,20 @@ const App = (() => {
     try { await Screens.renderDashboard(); }
     catch (e) { UI.toast(e.message, 'error'); }
     finally { UI.loading(false); }
-    // Muat info kesiapan di background (tidak perlu tunggu)
+    // Muat info kesiapan & badge notif di background
     _loadReadiness().catch(() => {});
+    _updateNotifBadge().catch(() => {});
+  };
+
+  /** Refresh manual kesiapan test link (bisa dipanggil dari HTML) */
+  const refreshReadiness = () => {
+    const badge = document.getElementById('readiness-badge');
+    if (badge) { badge.textContent = 'Memeriksa...'; badge.className = 'text-[10px] font-bold px-2 py-0.5 rounded-lg bg-slate-700 text-slate-400'; }
+    const refreshBtn = document.getElementById('readiness-refresh');
+    if (refreshBtn) { refreshBtn.style.animation = 'spin 1s linear infinite'; }
+    _loadReadiness().catch(() => {}).finally(() => {
+      if (refreshBtn) refreshBtn.style.animation = '';
+    });
   };
 
   /**
@@ -370,11 +382,19 @@ const App = (() => {
     const INDO_ISP_RE = /telkom|telekomunikasi|xl axiata|xl |indosat|isat|hutchison|tri |smartfren|fren|axis |by\.?u|orbit|myrepublic|firstmedia|first media|cbn |biznet|oxygen|icon\+|mnc|linknet|maxis|iconnet|moratel|lintasarta|centrin|tkdn|gtl|net1|home credit|groovy|cbbn|max telecom/i;
 
     // Fetch IP + info lokasi dari ipapi.co (HTTPS, gratis)
+    // Tambahkan timestamp agar browser tidak cache hasil (penting saat ganti VPN/IP)
     try {
-      const r = await fetch('https://ipapi.co/json/', { cache: 'no-store' });
+      const r = await fetch(`https://ipapi.co/json/?_=${Date.now()}`, {
+        cache: 'no-store',
+        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
+      });
       const d = await r.json();
 
-      const ip         = d.ip || '—';
+      const ipFull     = d.ip || '—';
+      // Trim IPv6 panjang: tampilkan 2 grup pertama + … + grup terakhir
+      const ipDisplay  = (ipFull.includes(':') && ipFull.length > 20)
+        ? ipFull.split(':').slice(0, 2).join(':') + ':…:' + ipFull.split(':').slice(-1)[0]
+        : ipFull;
       const orgRaw     = d.org || '';
       const ispDisplay = orgRaw.replace(/^AS\d+\s*/i, '').trim() || orgRaw; // hapus prefix ASxxxx
       const loc        = [d.city, d.region, d.country_name].filter(Boolean).join(', ') || '—';
@@ -392,7 +412,16 @@ const App = (() => {
       if (isOutsideIndo)        readyStatus = 'vpn';
       else if (!isKnownIndoISP) readyStatus = 'isp_unknown';
 
-      setEl('rd-ip',  ip);
+      // Tampilkan IP (trimmed untuk IPv6), klik untuk lihat penuh
+      const ipEl = document.getElementById('rd-ip');
+      if (ipEl) {
+        ipEl.textContent = ipDisplay;
+        ipEl.title = ipFull;
+        if (ipFull !== ipDisplay) {
+          ipEl.style.cursor = 'pointer';
+          ipEl.onclick = () => UI.confirm('Alamat IP Lengkap', ipFull, 'Tutup', 'bg-slate-700');
+        }
+      }
       setEl('rd-loc', loc);
       setEl('rd-isp', ispDisplay || '—');
 
@@ -749,6 +778,9 @@ const App = (() => {
     try {
       const { data } = await API.getPanduan();
       const isAdmin = state.user?.role === 'admin';
+      // Simpan data panduan ke window agar bisa diakses dari onclick tanpa encoding masalah
+      window._panduanData = {};
+      data.forEach(item => { window._panduanData[item.id] = item; });
       container.innerHTML = data.length
         ? data.map(item => `
           <div class="glass rounded-2xl p-5" data-panduan-id="${item.id}">
@@ -757,7 +789,7 @@ const App = (() => {
                 <span>${item.icon || '📌'}</span> ${_escHtml(item.title)}
               </h3>
               ${isAdmin ? `<div class="flex gap-1.5 shrink-0">
-                <button onclick="App.adminEditPanduan(${item.id},'${_escAttr(item.icon || '📌')}','${_escAttr(item.title)}','${_escAttr(item.content)}')"
+                <button onclick="App.adminEditPanduan(_panduanData[${item.id}].id,_panduanData[${item.id}].icon,_panduanData[${item.id}].title,_panduanData[${item.id}].content)"
                   class="text-[10px] px-2 py-1 rounded-lg bg-indigo-500/20 text-indigo-400 font-bold active:scale-95">✏️ Edit</button>
                 <button onclick="App.adminDeletePanduan(${item.id},'${_escAttr(item.title)}')"
                   class="text-[10px] px-2 py-1 rounded-lg bg-rose-500/20 text-rose-400 font-bold active:scale-95">🗑️</button>
@@ -776,40 +808,71 @@ const App = (() => {
   /** Escape untuk atribut HTML (single quote) */
   const _escAttr = (s) => String(s).replace(/'/g,'\\x27').replace(/\n/g,'\\n');
 
-  // ── Admin: CRUD Panduan ────────────────────────────────────
-  const adminAddPanduan = async () => {
-    const icon = await UI.inputModal('Ikon Panduan', 'Contoh: 📌 📋 🔗', '📌', 'Masukkan emoji ikon:');
-    if (icon === null) return;
-    const title = await UI.inputModal('Judul Panduan', 'Contoh: Cara Test Link...', '', 'Judul:');
-    if (title === null || !title) return;
-    const content = await UI.inputModal('Isi Panduan', 'Tulis langkah-langkah atau penjelasan...', '', 'Isi / Konten (bisa multi-baris):');
-    if (content === null || !content) return;
-    UI.loading(true);
-    try {
-      await API.addPanduan(title, content, icon || '📌');
-      UI.toast('Panduan ditambahkan ✅', 'success');
-      await renderPanduan();
-    } catch (e) { UI.toast(e.message, 'error'); }
-    finally { UI.loading(false); }
+  // ── Admin: CRUD Panduan dengan EasyMDE editor ─────────────
+  let _panduanEasyMDE = null;  // instance EasyMDE yang aktif
+  let _panduanEditId  = null;  // id item yang sedang diedit (null = tambah baru)
+
+  /** Buka editor panduan (tambah atau edit) */
+  const _openPanduanEditor = (mode = 'add', item = {}) => {
+    _panduanEditId = item.id || null;
+    document.getElementById('panduan-editor-mode').textContent = mode === 'edit' ? 'Edit Panduan' : 'Tambah Panduan';
+    document.getElementById('panduan-editor-icon').value    = item.icon  || '📌';
+    document.getElementById('panduan-editor-title').value   = item.title || '';
+    const contentEl = document.getElementById('panduan-editor-content');
+    // Decode escaped newlines jika dari atribut
+    const decodedContent = (item.content || '').replace(/\\n/g, '\n');
+
+    // Hancurkan instance lama jika ada
+    if (_panduanEasyMDE) { try { _panduanEasyMDE.toTextArea(); _panduanEasyMDE = null; } catch {} }
+
+    // Apply EasyMDE jika library tersedia
+    if (typeof EasyMDE !== 'undefined') {
+      _panduanEasyMDE = new EasyMDE({
+        element: contentEl,
+        initialValue: decodedContent,
+        placeholder: 'Tulis isi panduan di sini... Markdown didukung.\n\n**Tebal**, *miring*, # Judul, - daftar\n\n1. Langkah 1\n2. Langkah 2',
+        spellChecker: false,
+        autofocus: true,
+        toolbar: ['bold','italic','heading','|','unordered-list','ordered-list','|','link','quote','code','|','preview','side-by-side'],
+        minHeight: '200px',
+        renderingConfig: { singleLineBreaks: false }
+      });
+    } else {
+      // Fallback ke textarea biasa jika EasyMDE tidak load
+      contentEl.value = decodedContent;
+    }
+    document.getElementById('modal-panduan-edit').style.display = 'flex';
   };
 
-  const adminEditPanduan = async (id, curIcon, curTitle, curContent) => {
-    const icon = await UI.inputModal('Ubah Ikon', 'Contoh: 📌 📋 🔗', curIcon, 'Ikon emoji:');
-    if (icon === null) return;
-    const title = await UI.inputModal('Ubah Judul', '', curTitle, 'Judul:');
-    if (title === null || !title) return;
-    // Decode escaped content kembali ke newlines
-    const decodedContent = curContent.replace(/\\n/g, '\n');
-    const content = await UI.inputModal('Ubah Isi', '', decodedContent, 'Isi / Konten:');
-    if (content === null || !content) return;
-    UI.loading(true);
-    try {
-      await API.updatePanduan(id, title, content, icon || '📌');
-      UI.toast('Panduan diperbarui ✅', 'success');
-      await renderPanduan();
-    } catch (e) { UI.toast(e.message, 'error'); }
-    finally { UI.loading(false); }
+  /** Tutup editor panduan */
+  const closePanduanEditor = async (save) => {
+    if (save) {
+      const icon    = document.getElementById('panduan-editor-icon').value.trim()  || '📌';
+      const title   = document.getElementById('panduan-editor-title').value.trim();
+      const content = _panduanEasyMDE ? _panduanEasyMDE.value() : document.getElementById('panduan-editor-content').value.trim();
+      if (!title)   { UI.toast('Judul wajib diisi!', 'error'); return; }
+      if (!content) { UI.toast('Isi konten wajib diisi!', 'error'); return; }
+      UI.loading(true);
+      try {
+        if (_panduanEditId) {
+          await API.updatePanduan(_panduanEditId, title, content, icon);
+          UI.toast('Panduan diperbarui ✅', 'success');
+        } else {
+          await API.addPanduan(title, content, icon);
+          UI.toast('Panduan ditambahkan ✅', 'success');
+        }
+        await renderPanduan();
+      } catch (e) { UI.toast(e.message, 'error'); UI.loading(false); return; }
+      finally { UI.loading(false); }
+    }
+    // Tutup modal dan hancurkan EasyMDE
+    if (_panduanEasyMDE) { try { _panduanEasyMDE.toTextArea(); _panduanEasyMDE = null; } catch {} }
+    document.getElementById('modal-panduan-edit').style.display = 'none';
+    _panduanEditId = null;
   };
+
+  const adminAddPanduan  = ()                            => _openPanduanEditor('add');
+  const adminEditPanduan = (id, icon, title, content)    => _openPanduanEditor('edit', { id, icon, title, content });
 
   const adminDeletePanduan = async (id, title) => {
     const ok = await UI.confirm('Hapus Panduan?', `"${title}" akan dihapus permanen.`, 'Hapus', 'bg-rose-600');
@@ -827,6 +890,71 @@ const App = (() => {
   const navToTentang = () => {
     closeProfileDrawer();
     showScreen('screen-tentang');
+  };
+
+  // ── Notifikasi ────────────────────────────────────────────
+  let _seenNotifIds = new Set(JSON.parse(localStorage.getItem('lt_seen_notifs') || '[]'));
+
+  /** Perbarui badge notif di bottom nav */
+  const _updateNotifBadge = async () => {
+    try {
+      const notifs  = await API.getNotifs();
+      const active  = notifs.filter(n => n.is_active);
+      const unread  = active.filter(n => !_seenNotifIds.has(n.id));
+      const badge   = document.getElementById('notif-nav-badge');
+      if (!badge) return;
+      if (unread.length > 0) {
+        badge.textContent = unread.length > 9 ? '9+' : String(unread.length);
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    } catch { /* abaikan */ }
+  };
+
+  /** Tampilkan screen notifikasi */
+  const navToNotif = async () => {
+    showScreen('screen-notif');
+    await renderNotifScreen();
+    setActiveNav('notif');
+  };
+
+  /** Render daftar notifikasi di screen-notif */
+  const renderNotifScreen = async () => {
+    const container = document.getElementById('notif-list-screen');
+    if (!container) return;
+    try {
+      const notifs = await API.getNotifs();
+      const active = notifs.filter(n => n.is_active);
+      if (!active.length) {
+        container.innerHTML = '<p class="text-center text-slate-500 text-sm py-10">🔕 Belum ada notifikasi aktif.</p>';
+        return;
+      }
+      container.innerHTML = active.map(n => {
+        const isUnread = !_seenNotifIds.has(n.id);
+        const date     = new Date(n.created_at).toLocaleDateString('id-ID',
+          { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+        return `<div class="glass rounded-xl p-4 ${isUnread ? 'border border-indigo-500/30' : ''}">
+          ${isUnread ? '<span class="text-[9px] font-bold bg-indigo-500 text-white px-1.5 py-0.5 rounded-md mb-1 inline-block">BARU</span>' : ''}
+          <p class="text-sm font-semibold leading-snug">${_escHtml(n.message)}</p>
+          <p class="text-[10px] text-slate-500 mt-1">${date}</p>
+        </div>`;
+      }).join('');
+    } catch (e) {
+      container.innerHTML = '<p class="text-center text-rose-400 text-sm py-6">Gagal memuat notifikasi.</p>';
+    }
+  };
+
+  /** Tandai semua notifikasi sebagai sudah dibaca */
+  const markAllNotifRead = async () => {
+    try {
+      const notifs = await API.getNotifs();
+      notifs.filter(n => n.is_active).forEach(n => _seenNotifIds.add(n.id));
+      localStorage.setItem('lt_seen_notifs', JSON.stringify([..._seenNotifIds]));
+      document.getElementById('notif-nav-badge')?.classList.add('hidden');
+      await renderNotifScreen();
+      UI.toast('Semua notifikasi ditandai dibaca ✅', 'success', 1500);
+    } catch (e) { UI.toast(e.message, 'error'); }
   };
   const navToSession = () => {
     // Tampilkan pilihan sesi — buka dashboard lalu scroll ke sesi
@@ -1391,6 +1519,16 @@ const App = (() => {
 
     document.getElementById('login-username').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
     document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+
+    // Re-fetch kesiapan saat tab aktif kembali (user buka app setelah ganti VPN, dll.)
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden && state.user) {
+        const activeSc = document.querySelector('.screen.active');
+        if (activeSc?.id === 'screen-dashboard') {
+          _loadReadiness().catch(() => {});
+        }
+      }
+    });
   };
 
   document.addEventListener('DOMContentLoaded', init);
@@ -1399,7 +1537,7 @@ const App = (() => {
     login, logout, toggleAdminLogin, goBack, showScreen: _showScreenWithLoad,
     openSession, openCategory, openLink, reportStatus, closeStatusModal, markAllDone, resetCategory,
     navTo, navToTestLink, navToSession: navToTestLink, navToAdmin, navToProfile,
-    navToPanduan, navToTentang,
+    navToPanduan, navToTentang, navToNotif, markAllNotifRead,
     closeProfileDrawer, openSettings, deleteAccount, showLinkChanges,
     saveUsername, saveProvider, resetAllProgress,
     requestNotification,
@@ -1417,8 +1555,9 @@ const App = (() => {
     },
     adminAddProvider, adminDeleteProvider, adminCycleType, adminSetCategoryGroup,
     adminAddWhitelist, adminRemoveWhitelist, adminRenderWhitelist,
-    adminAddPanduan, adminEditPanduan, adminDeletePanduan,
+    adminAddPanduan, adminEditPanduan, adminDeletePanduan, closePanduanEditor,
     savePassword, removePassword,
+    refreshReadiness,
     installPWA, dismissInstall,
     kirimLaporan, closeReportModal, copyReport, shareSignal,
     toggleTheme,

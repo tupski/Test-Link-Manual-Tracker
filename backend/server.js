@@ -13,6 +13,7 @@ const morgan       = require('morgan');
 const path         = require('path');
 const apiRoutes    = require('./routes/api');
 const errorHandler = require('./middleware/errorHandler');
+const supabase     = require('./models/supabase');
 
 const app  = express();
 const PORT = process.env.PORT || 3000;
@@ -28,6 +29,24 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // ── API routes ────────────────────────────────────────────────────────
 app.use('/api', apiRoutes);
+
+// ── Halaman monitor dinamis ────────────────────────────────────────────
+// Path dikonfigurasi admin (default: /pantau). Cek config dari DB sebelum serve.
+app.get('/:slug', async (req, res, next) => {
+  const slug = req.params.slug;
+  // Abaikan path yang jelas bukan halaman monitor
+  if (slug.includes('.') || slug === 'api') return next();
+  try {
+    const { data } = await supabase.from('app_config').select('key,value');
+    const cfg = Object.fromEntries((data || []).map(r => [r.key, r.value]));
+    const monitorPath    = cfg.monitor_path    || 'pantau';
+    const monitorEnabled = cfg.monitor_enabled === 'true';
+    if (slug === monitorPath && monitorEnabled) {
+      return res.sendFile(path.join(__dirname, '..', 'public', 'pantau.html'));
+    }
+  } catch { /* abaikan error DB, fallback ke SPA */ }
+  next();
+});
 
 // ── Fallback SPA (Express 5 syntax) ──────────────────────────────────
 app.get('/{*path}', (req, res) => {

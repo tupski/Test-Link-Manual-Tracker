@@ -19,7 +19,7 @@ const { getSessions, updateSession }        = require('../controllers/configCont
 const { getNotifications, getAllNotifications, createNotification, updateNotification, deleteNotification } = require('../controllers/notificationsController');
 const { getProviders, createProvider, deleteProvider } = require('../controllers/providersController');
 const { getAppConfig, updateAppConfig }     = require('../controllers/appConfigController');
-const { getPublicCategories, getPublicLinks, getPublicSessions, getPublicStats } = require('../controllers/publicController');
+const { getPublicCategories, getPublicLinks, getPublicSessions, getPublicStats, getMonitorData, getMonitorConfig } = require('../controllers/publicController');
 const { getWhitelist, addToWhitelist, removeFromWhitelist } = require('../controllers/whitelistController');
 const { setMyPassword, removeMyPassword }   = require('../controllers/usersController');
 const { getPanduan, addPanduan, updatePanduan, deletePanduan } = require('../controllers/panduanController');
@@ -79,6 +79,8 @@ router.get('/public/categories',     getPublicCategories);
 router.get('/public/links/:catId',   getPublicLinks);
 router.get('/public/sessions',       getPublicSessions);
 router.get('/public/stats',          getPublicStats);
+router.get('/public/monitor',        getMonitorData);
+router.get('/public/monitor-config', getMonitorConfig);
 
 // ── Password user (self-service) ──────────────────────────────────────
 router.patch('/auth/me/password',    requireAuth, setMyPassword);
