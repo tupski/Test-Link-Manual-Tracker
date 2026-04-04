@@ -13,11 +13,17 @@ const getPublicCategories = async (req, res, next) => {
   try {
     const { data, error } = await supabase
       .from('categories')
-      .select('id, name, type, group_name, link_count, links_updated_at')
-      .order('type')
-      .order('name');
+      .select('id, name, type, group_name, sort_order, links_updated_at, links(count)')
+      .order('sort_order', { ascending: true })
+      .order('name', { ascending: true });
     if (error) return next(error);
-    res.json({ success: true, data });
+    const result = data.map(c => ({
+      id: c.id, name: c.name, type: c.type || 'manual',
+      group_name: c.group_name || 'Situs',
+      links_updated_at: c.links_updated_at,
+      link_count: c.links?.[0]?.count ?? 0
+    }));
+    res.json({ success: true, data: result });
   } catch (err) { next(err); }
 };
 
@@ -56,11 +62,14 @@ const getPublicStats = async (req, res, next) => {
     // Tanggal default = hari ini WIB
     const date = req.query.date || new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
 
-    // Ambil semua kategori
-    const { data: cats, error: catErr } = await supabase
+    // Ambil semua kategori (link_count dihitung dari relasi)
+    const { data: rawCats, error: catErr } = await supabase
       .from('categories')
-      .select('id, name, type, group_name, link_count');
+      .select('id, name, type, group_name, links(count)');
     if (catErr) return next(catErr);
+    const cats = rawCats.map(c => ({
+      ...c, link_count: c.links?.[0]?.count ?? 0
+    }));
 
     // Ambil progress hari ini (semua user)
     const { data: prog, error: progErr } = await supabase
