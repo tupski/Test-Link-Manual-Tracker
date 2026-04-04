@@ -8,7 +8,8 @@
 
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'changeme_secret_jwt_2026';
+// Trim untuk menghilangkan newline yang bisa masuk dari Vercel CLI env add
+const JWT_SECRET = (process.env.JWT_SECRET || 'changeme_secret_jwt_2026').trim();
 
 /**
  * Middleware: wajib login (user maupun admin).

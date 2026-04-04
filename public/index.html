@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#0f172a"/>
   <meta name="apple-mobile-web-app-capable" content="yes"/>
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-  <title>Link Tracker</title>
+  <title>Test Link Tracker</title>
   <link rel="manifest" href="/manifest.json"/>
   <link rel="apple-touch-icon" href="/icon.svg"/>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -37,9 +37,8 @@
 </div>
 
 <!-- ══════════════════════════════════════════════ MODAL: STATUS LINK -->
-<div id="modal-status" class="fixed inset-0 z-[90] hidden items-end justify-center bg-black/60 backdrop-blur-sm" onclick="App.closeStatusModal(event)">
-  <div class="glass rounded-t-3xl w-full max-w-md p-6 slide-up" onclick="event.stopPropagation()">
-    <div class="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-4"></div>
+<div id="modal-status" class="fixed inset-0 z-[90] hidden items-center justify-center bg-black/60 backdrop-blur-sm px-5" onclick="App.closeStatusModal(event)">
+  <div class="glass rounded-3xl w-full max-w-sm p-6 slide-up" onclick="event.stopPropagation()">
     <h3 class="text-lg font-bold mb-1 text-center">Bagaimana link tadi?</h3>
     <p class="text-slate-400 text-xs text-center mb-5">Pilih status untuk link yang baru dibuka</p>
     <div class="grid grid-cols-3 gap-3 mb-3">
@@ -86,8 +85,8 @@
   <div class="w-full max-w-sm slide-up">
     <div class="text-center mb-10">
       <div class="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-4xl shadow-2xl shadow-indigo-500/30">🔗</div>
-      <h1 class="text-3xl font-black tracking-tight">Link Tracker</h1>
-      <p class="text-slate-400 text-sm mt-1">Monitor link harian Anda</p>
+      <h1 class="text-3xl font-black tracking-tight">Test Link Tracker</h1>
+      <p class="text-slate-400 text-sm mt-1">Test Link Manual ga bakal kelewat!</p>
     </div>
     <div class="glass rounded-3xl p-6 space-y-4">
       <div>
@@ -100,11 +99,14 @@
         <input id="login-password" type="password" placeholder="Password admin..."
           class="w-full bg-slate-800/80 border border-slate-700 rounded-xl px-4 py-3.5 text-white placeholder-slate-500 outline-none focus:border-indigo-500 transition-colors text-sm"/>
       </div>
-      <label class="flex items-center gap-3 cursor-pointer py-1">
-        <input type="checkbox" id="login-is-admin" class="w-4 h-4 accent-indigo-500" onchange="App.toggleAdminLogin(this.checked)"/>
-        <span class="text-sm text-slate-300">Login sebagai Admin</span>
-      </label>
       <button onclick="App.login()" class="w-full py-4 rounded-2xl bg-gradient-to-r from-indigo-600 to-purple-600 text-white font-bold text-base shadow-lg shadow-indigo-500/30 active:scale-95 transition-all">Masuk →</button>
+    </div>
+    <!-- Tombol admin di bawah card, tengah halaman login -->
+    <div class="mt-8 text-center">
+      <button id="btn-admin-toggle" onclick="App.toggleAdminLogin()"
+        class="text-xs text-slate-500 hover:text-slate-300 transition-colors px-5 py-2.5 rounded-xl border border-slate-700/60 hover:border-slate-500/60 active:scale-95">
+        ⚙️ Masuk sebagai Admin
+      </button>
     </div>
   </div>
 </div>

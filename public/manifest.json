@@ -1,7 +1,7 @@
 {
-  "name": "Link Tracker",
-  "short_name": "LinkTracker",
-  "description": "Monitor link harian secara manual",
+  "name": "Test Link Tracker",
+  "short_name": "TestLink",
+  "description": "Test Link Manual ga bakal kelewat!",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0f172a",

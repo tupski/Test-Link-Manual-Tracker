@@ -24,6 +24,13 @@ const App = (() => {
     if (el) el.classList.add('active');
     if (pushHistory && state.screenHistory.slice(-1)[0] !== id)
       state.screenHistory.push(id);
+    // Simpan screen aktif ke localStorage (kecuali login)
+    if (id !== 'screen-login') {
+      localStorage.setItem('lt_screen',   id);
+      localStorage.setItem('lt_session',  state.currentSession  || '');
+      localStorage.setItem('lt_cat_id',   state.currentCatId    || '');
+      localStorage.setItem('lt_cat_name', state.currentCatName  || '');
+    }
     // Scroll to top
     window.scrollTo(0, 0);
   };
@@ -38,10 +45,23 @@ const App = (() => {
   };
 
   // ── Auth ──────────────────────────────────────────────────
-  const toggleAdminLogin = (checked) => {
-    document.getElementById('login-admin-section').classList.toggle('hidden', !checked);
-    if (checked) document.getElementById('login-username').value = 'admin';
-    else document.getElementById('login-username').value = '';
+  /**
+   * Toggle form login admin — dipanggil oleh tombol di bawah halaman login.
+   */
+  const toggleAdminLogin = () => {
+    const section = document.getElementById('login-admin-section');
+    const btn     = document.getElementById('btn-admin-toggle');
+    const isHidden = section.classList.contains('hidden');
+    section.classList.toggle('hidden', !isHidden);
+    if (isHidden) {
+      // Tampilkan form admin
+      document.getElementById('login-username').value = 'admin';
+      if (btn) { btn.textContent = '✕ Tutup login admin'; btn.classList.add('text-indigo-400','border-indigo-500/50'); }
+    } else {
+      // Sembunyikan form admin
+      document.getElementById('login-username').value = '';
+      if (btn) { btn.textContent = '⚙️ Masuk sebagai Admin'; btn.classList.remove('text-indigo-400','border-indigo-500/50'); }
+    }
   };
 
   const login = async () => {
@@ -62,18 +82,25 @@ const App = (() => {
   const logout = async () => {
     const ok = await UI.confirm('Keluar?', 'Yakin ingin keluar dari akun ini?', 'Keluar', 'bg-indigo-600');
     if (!ok) return;
-    localStorage.removeItem('lt_token');
+    // Bersihkan semua data sesi dari localStorage
+    ['lt_token','lt_screen','lt_session','lt_cat_id','lt_cat_name'].forEach(k => localStorage.removeItem(k));
     state = { user: null, currentSession: null, currentCatId: null, currentCatName: null, pendingLinkId: null, pendingProgId: null, pendingCatId: null, screenHistory: [], adminEditCatId: null };
     document.getElementById('bottom-nav').classList.add('hidden');
     document.getElementById('login-username').value = '';
     document.getElementById('login-password').value = '';
-    document.getElementById('login-is-admin').checked = false;
+    // Reset tombol admin
+    const btn = document.getElementById('btn-admin-toggle');
+    if (btn) { btn.textContent = '⚙️ Masuk sebagai Admin'; btn.classList.remove('text-indigo-400','border-indigo-500/50'); }
     document.getElementById('login-admin-section').classList.add('hidden');
     state.screenHistory = ['screen-login'];
     showScreen('screen-login', false);
   };
 
-  const afterLogin = () => {
+  /**
+   * Dipanggil setelah login berhasil atau token valid saat init.
+   * @param {boolean} restore - true jika restore dari localStorage (refresh halaman)
+   */
+  const afterLogin = (restore = false) => {
     const u = state.user;
     // Update greeting
     const hour = new Date().getHours();
@@ -85,11 +112,48 @@ const App = (() => {
     if (u.role === 'admin') document.getElementById('nav-admin-btn').style.display = 'flex';
     else document.getElementById('nav-admin-btn').style.display = 'none';
     document.getElementById('bottom-nav').classList.remove('hidden');
-    state.screenHistory = ['screen-dashboard'];
-    showScreen('screen-dashboard', false);
-    loadDashboard();
+
     // Daftarkan service worker
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+
+    if (restore) {
+      // Kembalikan ke screen terakhir sebelum refresh
+      const savedScreen  = localStorage.getItem('lt_screen')   || 'screen-dashboard';
+      const savedSession = localStorage.getItem('lt_session')  || null;
+      const savedCatId   = localStorage.getItem('lt_cat_id')   || null;
+      const savedCatName = localStorage.getItem('lt_cat_name') || null;
+
+      state.currentSession  = savedSession;
+      state.currentCatId    = savedCatId;
+      state.currentCatName  = savedCatName;
+      state.screenHistory   = ['screen-dashboard'];
+
+      // Navigasi ke screen yang tersimpan
+      if (savedScreen === 'screen-links' && savedCatId) {
+        showScreen('screen-links', false);
+        state.screenHistory.push('screen-categories');
+        state.screenHistory.push('screen-links');
+        UI.loading(true);
+        Screens.renderLinks(savedCatId, savedCatName, savedSession)
+          .catch(e => { UI.toast(e.message, 'error'); showScreen('screen-dashboard', false); loadDashboard(); })
+          .finally(() => UI.loading(false));
+      } else if (savedScreen === 'screen-categories' && savedSession) {
+        state.screenHistory.push('screen-categories');
+        showScreen('screen-categories', false);
+        UI.loading(true);
+        Screens.renderCategories(savedSession)
+          .catch(e => { UI.toast(e.message, 'error'); showScreen('screen-dashboard', false); loadDashboard(); })
+          .finally(() => UI.loading(false));
+      } else {
+        showScreen('screen-dashboard', false);
+        loadDashboard();
+      }
+    } else {
+      // Login baru — selalu ke dashboard
+      state.screenHistory = ['screen-dashboard'];
+      showScreen('screen-dashboard', false);
+      loadDashboard();
+    }
   };
 
   const loadDashboard = async () => {
@@ -148,8 +212,10 @@ const App = (() => {
     try {
       await API.updateStatus(state.pendingProgId, status);
       UI.toast(`Status: ${status === 'normal' ? '✅ Normal' : status === 'blocked' ? '🚫 Diblokir' : '❌ Error 404'}`, 'success');
-      // Refresh daftar link
+      // Refresh daftar link setelah update status
       await Screens.renderLinks(state.currentCatId, state.currentCatName, state.currentSession);
+      // Auto-update dashboard di background (tidak await agar tidak blok UI)
+      Screens.renderDashboard().catch(() => {});
     } catch (e) { UI.toast(e.message, 'error'); }
     finally { UI.loading(false); state.pendingProgId = null; }
   };
@@ -334,11 +400,15 @@ const App = (() => {
       try {
         const res = await API.me();
         state.user = res;
-        afterLogin();
-      } catch { localStorage.removeItem('lt_token'); }
+        // restore=true → kembalikan ke screen terakhir, bukan dashboard
+        afterLogin(true);
+      } catch {
+        // Token tidak valid, bersihkan dan tampilkan login
+        ['lt_token','lt_screen','lt_session','lt_cat_id','lt_cat_name'].forEach(k => localStorage.removeItem(k));
+      }
       finally { UI.loading(false); }
     }
-    // Enter pada input username
+    // Enter pada input username & password
     document.getElementById('login-username').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
     document.getElementById('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
   };

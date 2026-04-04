@@ -19,6 +19,18 @@ const API = (() => {
     if (body !== undefined) opts.body = JSON.stringify(body);
     const res = await fetch(BASE + path, opts);
     const data = await res.json().catch(() => ({}));
+
+    // Jika token expired/invalid dan bukan endpoint login, bersihkan sesi
+    if (res.status === 401 && path !== '/auth/login') {
+      localStorage.removeItem('lt_token');
+      localStorage.removeItem('lt_screen');
+      localStorage.removeItem('lt_session');
+      localStorage.removeItem('lt_cat_id');
+      localStorage.removeItem('lt_cat_name');
+      window.location.reload();
+      return;
+    }
+
     if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
     return data;
   };
