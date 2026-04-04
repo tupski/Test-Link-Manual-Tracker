@@ -5,6 +5,36 @@ Format mengikuti [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [7.0.0] - 2026-04-04
+
+### ✨ Fitur Baru (Major)
+- **Halaman Pantau Publik `/pantau`** — Dashboard real-time monitoring progres test link tanpa login. Auto-refresh setiap 10 detik, tampilkan statistik global, per tipe, per peserta, dan aktivitas terbaru
+- **Backend API Monitor** — `GET /api/public/monitor` dengan data lengkap: summary, by_type, per-user, recent activity, session status
+- **Routing Dinamis Monitor** — Path halaman pantau bisa diatur admin di DB (`monitor_path`), enabled/disabled (`monitor_enabled`), dan session-only (`monitor_session_only`)
+- **EasyMDE Editor Panduan** — Edit panduan test link menggunakan rich text editor dengan Markdown support, live preview, dan toolbar lengkap
+- **Kata Sandi Akun User** — User bisa tambahkan kata sandi opsional untuk proteksi akun. Login wajib memasukkan password jika sudah di-set. `PATCH /api/auth/me/password`
+- **Whitelist Username Admin** — Admin bisa batasi username yang diizinkan masuk. Jika whitelist kosong = semua boleh masuk. `GET/POST/DELETE /api/whitelist`
+- **Provider Opsional** — Semua user tidak wajib memilih provider saat login
+
+### 🔧 Perbaikan
+- **VPN Detection by Location** — Deteksi VPN kini menggunakan `country_code !== 'ID'` dari ipapi.co. Jika lokasi bukan Indonesia = terindikasi VPN. Jika Indonesia + ISP cocok = Siap
+- **Tombol Batal Modal** — Fixed: Promise tidak resolve saat Batal diklik, menyebabkan UI hang
+- **Grup Kategori Admin** — Fixed: pilih grup tidak langsung update tampilan karena `renderCategories()` tidak dipanggil
+- **Admin Edit Panduan** — Fixed: encoding masalah saat pass content ke editor, kini pakai `window._panduanData` map
+- **CSS Path Pantau** — Fixed: pantau.html merujuk `/style.css` → diperbaiki ke `/css/style.css`
+
+### 📡 REST API Baru
+- `GET  /api/public/monitor` — Data real-time monitoring (publik)
+- `GET  /api/public/monitor-config` — Konfigurasi halaman pantau
+- `PATCH /api/auth/me/password` — Set/ubah kata sandi user
+- `DELETE /api/auth/me/password` — Hapus kata sandi user
+- `GET   /api/whitelist` — Daftar whitelist (admin)
+- `POST  /api/whitelist` — Tambah username ke whitelist (admin)
+- `DELETE /api/whitelist/:id` — Hapus dari whitelist (admin)
+- `GET/POST/PUT/DELETE /api/panduan` — CRUD panduan test link (admin)
+
+---
+
 ## [3.0.0] - 2026-04-04
 
 ### ✨ Fitur Baru (Major)
