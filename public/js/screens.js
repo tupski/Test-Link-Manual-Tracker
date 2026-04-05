@@ -19,10 +19,11 @@ const Screens = (() => {
   };
 
   // ── Stat card helper ──────────────────────────────────────────────────
-  const _statCard = (label, value, color) =>
-    `<div class="glass rounded-xl p-3 text-center">
-      <p class="text-xl font-black ${color}">${value}</p>
-      <p class="text-[9px] font-semibold text-slate-500 mt-0.5 leading-tight">${label}</p>
+  const _statCard = (label, value, color, icon) =>
+    `<div class="glass rounded-2xl p-4 text-center">
+      <div class="text-xl mb-1">${icon}</div>
+      <p class="text-xl font-black ${color} tracking-tight tabular-nums">${value}</p>
+      <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mt-1">${label}</p>
     </div>`;
 
   /**
@@ -67,19 +68,16 @@ const Screens = (() => {
       return `${done}/${total}`;
     };
 
-    // Baris 1: Total | Dibuka | Belum Dibuka
-    // Baris 2: Normal | Error | Diblokir
-    // Baris 3: Progress Otomatis | Utama | Manual
+    // Metrik Utama: Total | Beres | Progress | Masalah
+    const totalDone = countNormal + countError + countBlocked;
+    const totalPct  = totalLinks ? Math.round(totalDone / totalLinks * 100) : 0;
+    const problemCount = countError + countBlocked;
+
     document.getElementById('dash-stats-grid').innerHTML = [
-      _statCard('Total Link',      totalLinks,              'text-slate-200'),
-      _statCard('🔵 Dibuka',       countOpened,             'text-indigo-400'),
-      _statCard('⬜ Belum Buka',   countUntouched,          'text-slate-500'),
-      _statCard('✅ Normal',        countNormal,             'text-emerald-400'),
-      _statCard('❌ Error',         countError,              'text-amber-400'),
-      _statCard('🚫 Diblokir',     countBlocked,            'text-rose-400'),
-      _statCard('🤖 Otomatis',     _typeDone('otomatis'),   'text-indigo-400'),
-      _statCard('⭐ Utama',        _typeDone('utama'),      'text-amber-400'),
-      _statCard('🔗 Manual',       _typeDone('manual'),     'text-slate-300'),
+      _statCard('Total Link', totalLinks, 'text-slate-200', '🔗'),
+      _statCard('Beres',      totalDone,  'text-emerald-400', '✅'),
+      _statCard('Progress',   totalPct + '%', 'text-indigo-400', '📊'),
+      _statCard('Masalah',    problemCount, 'text-rose-400', '⚠️'),
     ].join('');
 
     // ── Update link terbaru — paginasi 5 item ─────────────────────────────────
@@ -230,27 +228,37 @@ const Screens = (() => {
       const sessEmoji  = SESS_EMOJI[s.session_name]   || '🕐';
       const sessLabel  = SESS_DISPLAY[s.session_name] || s.session_name;
       const startLabel = UI.formatTime(s.start_hour, s.start_minute);
+      
+      const isActive   = timer.status === 'active' || timer.status === 'overtime';
+      const stateClass = isActive ? 'session-active' : (timer.status === 'expired' ? 'session-done opacity-60' : 'opacity-80');
 
-      return `<div class="glass rounded-2xl p-5 active:scale-[.98] transition-all cursor-pointer" onclick="App.openSession('${s.session_name}')">
-        <div class="flex items-start justify-between mb-3">
+      return `<div class="glass rounded-3xl p-5 active:scale-[.98] transition-all cursor-pointer ${stateClass}" onclick="App.openSession('${s.session_name}')">
+        <div class="flex items-start justify-between mb-4">
           <div class="flex items-center gap-3">
-            <span class="text-2xl">${sessEmoji}</span>
+            <span class="text-3xl">${sessEmoji}</span>
             <div>
-              <h3 class="font-bold text-base">${sessLabel}</h3>
-              <p class="text-slate-400 text-xs mt-0.5">${timer.startLabel ? timer.startLabel : startLabel} WIB</p>
-              <p class="text-slate-500 text-[10px] mt-0.5">${todayDisplay}</p>
+              <h3 class="font-bold text-lg leading-none">${sessLabel}</h3>
+              <p class="text-slate-500 text-[10px] uppercase tracking-wider font-bold mt-1.5">${timer.startLabel ? timer.startLabel : startLabel} WIB</p>
             </div>
           </div>
           ${badgeFor(timer)}
         </div>
-        ${typeRow('otomatis', sessProg)}
-        ${typeRow('utama', sessProg)}
-        ${typeRow('manual', sessProg)}
-        <div class="flex justify-between text-xs text-slate-500 mt-2 mb-1">
-          <span>${doneLinks}/${totalLinks} link</span><span>${pct}%</span>
+        <div class="space-y-2 mb-4">
+            ${typeRow('otomatis', sessProg)}
+            ${typeRow('utama', sessProg)}
+            ${typeRow('manual', sessProg)}
         </div>
-        <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden">
-          <div class="h-full ${pct===100?'bg-emerald-500':'bg-gradient-to-r from-indigo-500 to-purple-500'} rounded-full progress-bar" style="width:${pct}%"></div>
+        <div class="flex items-end justify-between">
+          <div>
+            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-0.5">Progress Sesi</p>
+            <p class="text-sm font-black text-slate-300">${doneLinks} <span class="text-slate-500 font-bold ml-0.5">/ ${totalLinks} Link</span></p>
+          </div>
+          <div class="text-right">
+            <p class="text-2xl font-black ${pct === 100 ? 'text-emerald-400' : (isActive ? 'text-indigo-400' : 'text-slate-400')} tabular-nums">${pct}%</p>
+          </div>
+        </div>
+        <div class="h-2 bg-slate-800/50 rounded-full overflow-hidden mt-3">
+          <div class="h-full ${pct === 100 ? 'bg-emerald-500' : (isActive ? 'bg-gradient-to-r from-indigo-500 to-purple-500' : 'bg-slate-700')} rounded-full progress-bar" style="width:${pct}%"></div>
         </div>
       </div>`;
     }).join('') +
@@ -320,15 +328,18 @@ const Screens = (() => {
       const pct     = total ? Math.round(done / total * 100) : 0;
       const isDone  = total > 0 && done >= total;
       const updated = cat.links_updated_at ? UI.formatDate(cat.links_updated_at) : '-';
-      return `<div class="cat-card glass rounded-xl p-4 active:scale-[.98] transition-all cursor-pointer ${isDone ? 'border-emerald-500/20' : ''}" data-done="${isDone}" onclick="App.openCategory(${cat.id}, '${cat.name.replace(/'/g,"\\'")}')">
-        <div class="flex items-center justify-between mb-2">
-          <h3 class="font-semibold text-sm truncate flex-1">${cat.name}</h3>
-          ${isDone ? '<span class="text-emerald-400 text-xs font-bold ml-2 shrink-0">✓ Selesai</span>' : `<span class="text-xs text-slate-400">${done}/${total}</span>`}
+      return `<div class="cat-card glass rounded-2xl p-4 active:scale-[.98] transition-all cursor-pointer ${isDone ? 'cat-card-done' : ''}" data-done="${isDone}" onclick="App.openCategory(${cat.id}, '${cat.name.replace(/'/g,"\\'")}')">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="font-bold text-sm truncate flex-1">${cat.name}</h3>
+          ${isDone ? '<span class="text-emerald-400 text-xs font-black ml-2 shrink-0 animate-pulse">✓ BERES</span>' : `<span class="text-xs font-bold text-slate-500">${done}/${total}</span>`}
         </div>
-        <div class="h-1.5 bg-slate-800 rounded-full overflow-hidden mb-1.5">
+        <div class="h-1.5 bg-slate-800/60 rounded-full overflow-hidden mb-2">
           <div class="h-full ${isDone ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gradient-to-r from-indigo-500 to-purple-500'} rounded-full progress-bar" style="width:${pct}%"></div>
         </div>
-        <p class="text-[10px] text-slate-500">🕐 Terakhir Update: ${updated}</p>
+        <div class="flex items-center justify-between">
+            <p class="text-[10px] font-bold text-slate-500 uppercase tracking-widest">${pct}% Selesai</p>
+            <p class="text-[9px] text-slate-600 font-medium">Update: ${updated}</p>
+        </div>
       </div>`;
     };
 
@@ -357,9 +368,9 @@ const Screens = (() => {
       groups.forEach(grp => {
         const grpCats = typeCats.filter(c => (c.group_name || 'Situs') === grp);
         groupsHtml += `
-          <div class="mb-2">
-            <p class="text-[10px] font-bold text-slate-600 uppercase tracking-widest mb-1.5 px-1">${grp}</p>
-            <div class="space-y-2">${grpCats.map(catCard).join('')}</div>
+          <div class="mb-4">
+            <p class="section-title mb-2 px-1">${grp}</p>
+            <div class="space-y-2.5">${grpCats.map(catCard).join('')}</div>
           </div>`;
       });
       // Tombol Kirim Laporan: setelah utama (mencakup otomatis+utama), dan setelah manual
@@ -378,8 +389,11 @@ const Screens = (() => {
           </button>`;
         }
       }
-      html += `<div class="pt-3 pb-1">
-        <p class="text-xs font-bold ${meta.color} uppercase tracking-wider mb-2 px-1">${meta.label}</p>
+      html += `<div class="pt-4 pb-1">
+        <p class="text-[11px] font-black ${meta.color} uppercase tracking-widest mb-3 px-1 flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-current"></span>
+            ${meta.label}
+        </p>
         ${groupsHtml}
         ${laporanBtn}
       </div>`;
@@ -432,38 +446,39 @@ const Screens = (() => {
     document.getElementById('links-progress-text').textContent = `${done}/${total}`;
     document.getElementById('links-progress-bar').style.width  = pct + '%';
 
-    const statusIcon  = { normal:'✅', blocked:'🚫', error_404:'❌', opened:'🔵' };
-    // Warna jauh lebih kontras: border tebal + background kuat agar beda jelas
-    const statusBg = {
-      normal:    'border-l-4 border-l-emerald-500 border-emerald-500/30 bg-emerald-500/15',
-      blocked:   'border-l-4 border-l-rose-500    border-rose-500/30    bg-rose-500/15',
-      error_404: 'border-l-4 border-l-amber-500   border-amber-500/30   bg-amber-500/15',
-      opened:    'border-l-4 border-l-indigo-500  border-indigo-500/30  bg-indigo-500/10'
+    const statusBadge = {
+      normal:    'status-badge status-badge-normal',
+      blocked:   'status-badge status-badge-blocked',
+      error_404: 'status-badge status-badge-error',
+      opened:    'status-badge status-badge-none', // 'opened' is temporary before confirmation
+      none:      'hidden'
     };
-    // Format waktu klik (WIB-aware)
-    const fmtTime = dt => dt
-      ? new Date(dt).toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' })
-      : '';
+    const statusText = {
+      normal: 'NORMAL', blocked: 'DIBLOKIR', error_404: 'ERROR', opened: 'DIBUKA', none: ''
+    };
 
     const container = document.getElementById('links-list');
-    // data-prog-link dipakai untuk optimistic update di reportStatus
-    // data-opened dipakai untuk auto-scroll ke link pertama yang belum dibuka
     container.innerHTML = links.map(link => {
       const prog   = catProg.find(p => p.link_id === link.id);
       const s      = prog?.status || 'none';
       const domain = link.url.replace(/^https?:\/\//, '').split('/')[0];
-      const timeStr = prog?.updated_at ? `🕐 ${fmtTime(prog.updated_at)}` : '';
+      const timeStr = prog?.updated_at ? fmtTime(prog.updated_at) : '';
 
-      return `<div class="glass rounded-xl p-2.5 flex items-center gap-2.5 cursor-pointer active:scale-[.98] transition-all ${s !== 'none' ? (statusBg[s] || '') : 'hover:bg-white/5'}"
+      return `<div class="glass rounded-2xl p-4 flex items-center justify-between gap-3 cursor-pointer active:scale-[.98] transition-all ${s !== 'none' ? 'bg-white/5 border-white/10' : 'hover:bg-white/5'}"
         data-prog-link="${link.id}" ${s !== 'none' ? 'data-opened' : ''}
         onclick="App.openLink(${link.id}, '${link.url.replace(/'/g, "\\'")}', ${catId}, '${catName.replace(/'/g, "\\'")}', '${sessionName}', '${prog?.id || ''}')">
         <div class="flex-1 min-w-0">
-          <p class="text-xs text-slate-200 font-mono truncate">${domain}</p>
-          <p class="text-[10px] text-slate-500 mt-0.5" data-click-time>${timeStr}</p>
+          <p class="text-sm font-bold text-slate-200 truncate mb-0.5">${domain}</p>
+          <div class="flex items-center gap-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+            <span>Link #${link.id}</span>
+            ${timeStr ? `<span>•</span> <span>${timeStr} WIB</span>` : ''}
+          </div>
         </div>
-        <span class="shrink-0 text-base leading-none" data-status-badge>${s !== 'none' ? (statusIcon[s] || '') : '⬜'}</span>
+        <div class="${statusBadge[s]}" data-status-badge>
+            ${statusIcon[s] || ''} <span>${statusText[s]}</span>
+        </div>
       </div>`;
-    }).join('') || '<p class="text-center text-slate-500 text-sm py-10">Belum ada link di kategori ini.</p>';
+    }).join('') || '<p class="text-center text-slate-500 text-sm py-10 font-bold uppercase tracking-widest opacity-30">Belum ada link.</p>';
 
     // Auto-scroll ke link pertama yang belum dibuka (setelah DOM dirender)
     setTimeout(() => {

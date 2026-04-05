@@ -1109,10 +1109,12 @@ const App = (() => {
       state.pendingLinkId  = linkId;
       state.pendingProgId  = progId;
       state.pendingCatId   = catId;
-      state.pendingDomain  = url.replace(/^https?:\/\//, '').split('/')[0]; // domain untuk flash
-      if (!state.catStartTime) state.catStartTime = Date.now(); // catat waktu mulai kategori
+      state.pendingDomain  = url.replace(/^https?:\/\//, '').split('/')[0];
+      const modalName = document.getElementById('status-modal-name');
+      if (modalName) modalName.textContent = state.pendingDomain;
+      
+      if (!state.catStartTime) state.catStartTime = Date.now();
       window.open(url, '_blank');
-      // Tampilkan modal status setelah jeda singkat
       setTimeout(() => document.getElementById('modal-status').style.display = 'flex', 600);
     } catch (e) { UI.toast(e.message, 'error'); }
     finally { UI.loading(false); }
@@ -1382,9 +1384,39 @@ const App = (() => {
   // ── Bottom Nav ─────────────────────────────────────────────
   /** Set active state pada tombol nav sesuai key */
   const setActiveNav = (key) => {
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    const btn = document.querySelector(`[data-nav="${key}"]`);
+    document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+    // Cari tombol berdasarkan fungsi navigasi yang dipanggil
+    const btn = document.querySelector(`[onclick="App.navTo${key.charAt(0).toUpperCase() + key.slice(1)}()"]`);
     if (btn) btn.classList.add('active');
+  };
+
+  /** Membuka/menutup Bottom Sheet Laporan */
+  const openReportSheet = () => {
+    const sheet = document.getElementById('report-bottom-sheet');
+    if (!sheet) return;
+    sheet.classList.remove('hidden');
+    const content = sheet.querySelector('.glass');
+    if (content) {
+      content.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+      content.style.transform = 'translateY(100%)';
+      void content.offsetHeight;
+      content.style.transform = 'translateY(0)';
+    }
+  };
+
+  const closeReportSheet = () => {
+    const sheet = document.getElementById('report-bottom-sheet');
+    if (!sheet) return;
+    const content = sheet.querySelector('.glass');
+    if (content) {
+      content.style.transform = 'translateY(100%)';
+    }
+    setTimeout(() => sheet.classList.add('hidden'), 300);
+  };
+
+  const kirimLaporanTipe = (type) => {
+    closeReportSheet();
+    setTimeout(() => kirimLaporan(type), 350);
   };
 
   const navTo = (key) => {
@@ -2295,6 +2327,7 @@ const App = (() => {
     refreshReadiness, runSpeedTest, scrollToUnopened,
     installPWA, dismissInstall,
     kirimLaporan, closeReportModal, copyReport, shareSignal,
+    openReportSheet, closeReportSheet, kirimLaporanTipe,
     toggleTheme,
     closeConfirm: UI?.closeConfirm, closeInputModal: UI?.closeInputModal
   };

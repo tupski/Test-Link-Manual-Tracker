@@ -31,6 +31,12 @@ module.exports = {
     'border-emerald-500/20', 'bg-slate-800/60', 'border-slate-700/40',
     // Category cards done state
     'border-emerald-500/20',
+    // v5.0 update-ui — new status badges & session states
+    'session-active', 'session-done', 'cat-card-done',
+    'status-badge-normal', 'status-badge-blocked', 'status-badge-error', 'status-badge-none',
+    'bg-orange-500/20', 'text-orange-400', 'border-orange-500/30',
+    'bg-orange-500/10', 'text-orange-400',
+    'open',
   ],
   theme: { extend: {} },
   plugins: [],
