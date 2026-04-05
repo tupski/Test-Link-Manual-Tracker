@@ -290,12 +290,14 @@ const getIpInfo = async (req, res, next) => {
       return res.status(400).json({ success: false, error: 'IP klien tidak terdeteksi.' });
     }
 
-    const url = clientIp
-      ? `https://ipwho.is/${clientIp}`
-      : 'https://ipwho.is/';
+    // Gunakan ip-api.com — lebih akurat untuk ISP Indonesia (mengembalikan field `isp` terpisah)
+    // Catatan: ip-api.com free tier hanya mendukung HTTP (bukan HTTPS) untuk request langsung,
+    // tapi dari server Node.js (bukan browser) ini aman digunakan.
+    const fields = 'status,message,country,countryCode,city,regionName,isp,org,query';
+    const url    = `http://ip-api.com/json/${encodeURIComponent(clientIp)}?fields=${fields}`;
 
     const controller = new AbortController();
-    const timeout    = setTimeout(() => controller.abort(), 5000);
+    const timeout    = setTimeout(() => controller.abort(), 6000);
     let data;
     try {
       const r = await fetch(url, {
@@ -305,27 +307,41 @@ const getIpInfo = async (req, res, next) => {
       data = await r.json();
     } finally { clearTimeout(timeout); }
 
-    if (!data || !data.success) {
-      // Fallback: hanya IP saja via ipify
+    if (!data || data.status !== 'success') {
+      // Fallback ke ipwho.is jika ip-api gagal
       try {
         const c2 = new AbortController();
-        const t2 = setTimeout(() => c2.abort(), 3000);
-        const r2 = await fetch('https://api.ipify.org?format=json', { signal: c2.signal });
+        const t2 = setTimeout(() => c2.abort(), 5000);
+        const r2 = await fetch(`https://ipwho.is/${clientIp}`, {
+          headers: { 'Accept': 'application/json', 'User-Agent': 'test-link-tracker/1.0' },
+          signal: c2.signal
+        });
         clearTimeout(t2);
         const d2 = await r2.json();
-        return res.json({ success: true, ip: d2.ip, country_code: null, city: null, region: null, org: null, country_name: null });
+        if (d2?.success) {
+          return res.json({
+            success:      true,
+            ip:           d2.ip           || clientIp,
+            country_code: d2.country_code || null,
+            country_name: d2.country      || null,
+            city:         d2.city         || null,
+            region:       d2.region       || null,
+            org:          d2.org          || null
+          });
+        }
       } catch { /* abaikan */ }
       return res.status(503).json({ success: false, error: 'Gagal mendapatkan data IP.' });
     }
 
+    // ip-api.com sukses — gunakan field `isp` (nama ISP bersih) sebagai org
     res.json({
       success:      true,
-      ip:           data.ip           || clientIp || null,
-      country_code: data.country_code || null,
+      ip:           data.query        || clientIp,
+      country_code: data.countryCode  || null,
       country_name: data.country      || null,
       city:         data.city         || null,
-      region:       data.region       || null,
-      org:          data.org          || data.connection?.org || null
+      region:       data.regionName   || null,
+      org:          data.isp          || data.org || null   // isp = nama ISP bersih (tanpa AS prefix)
     });
   } catch (err) { next(err); }
 };

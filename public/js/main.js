@@ -419,6 +419,26 @@ const App = (() => {
     setEl('rd-os', os);
     setEl('rd-browser', browser);
 
+    // ── Deteksi jenis koneksi (WiFi vs Data Seluler) ──────────────────
+    // Network Information API — didukung Chrome Android, tidak semua browser
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (conn) {
+      const buildNetworkLabel = () => {
+        const type = conn.type;          // 'wifi' | 'cellular' | 'ethernet' | 'bluetooth' | 'none' | 'other' | 'unknown'
+        const eff  = (conn.effectiveType || '').toUpperCase(); // '4G' | '3G' | '2G' | 'SLOW-2G'
+        if (type === 'wifi')     return `📶 WiFi${eff ? ' (' + eff + ')' : ''}`;
+        if (type === 'cellular') return `📱 Data Seluler${eff ? ' (' + eff + ')' : ''}`;
+        if (type === 'ethernet') return `🔌 Kabel${eff ? ' (' + eff + ')' : ''}`;
+        if (type === 'none')     return '❌ Tidak Ada Koneksi';
+        return eff ? `🔗 ${eff}` : '🔗 Online';
+      };
+      setEl('rd-network', buildNetworkLabel());
+      // Update label jika koneksi berubah (user pindah WiFi ↔ data)
+      conn.addEventListener('change', () => setEl('rd-network', buildNetworkLabel()));
+    } else {
+      setEl('rd-network', '— (browser tidak mendukung)');
+    }
+
     // ── Coba UA-CH (User-Agent Client Hints) untuk versi Android yg akurat ──
     // Chrome di Android membekukan UA dengan "Android 10" — UA-CH mengembalikan versi asli
     if (navigator.userAgentData?.getHighEntropyValues) {
@@ -804,6 +824,26 @@ const App = (() => {
   const openLink = async (linkId, url, catId, catName, sessionName, progId) => {
     const today = UI.todayWIB();
 
+    // ── Peringatan jika menggunakan WiFi ─────────────────────
+    // Network Information API hanya tersedia di Chrome Android
+    const conn   = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const isWifi = conn?.type === 'wifi';
+    if (isWifi && localStorage.getItem('lt_suppress_wifi_warn') !== '1') {
+      const ok = await UI.confirm(
+        '📶 Koneksi WiFi Terdeteksi',
+        `<p>Anda menggunakan koneksi <strong>WiFi</strong>. Test link mungkin tidak akurat karena IP WiFi bisa berbeda dari IP provider seluler Anda.</p>` +
+        `<p style="margin-top:.5rem;color:#fbbf24;font-size:.75rem">Disarankan menggunakan <strong>data seluler</strong> untuk hasil yang lebih akurat.</p>` +
+        `<label style="display:flex;align-items:center;gap:.5rem;cursor:pointer;margin-top:.75rem">` +
+          `<input type="checkbox" id="chk-suppress-wifi" style="width:1rem;height:1rem;accent-color:#6366f1"/>` +
+          `<span style="font-size:.75rem;color:#94a3b8">Jangan tampilkan lagi</span>` +
+        `</label>`,
+        'Tetap Buka', 'bg-amber-600', true
+      );
+      if (document.getElementById('chk-suppress-wifi')?.checked)
+        localStorage.setItem('lt_suppress_wifi_warn', '1');
+      if (!ok) return;
+    }
+
     // ── Peringatan jika di luar jam sesi ─────────────────────
     if (sessionName) {
       try {
@@ -823,15 +863,17 @@ const App = (() => {
             const diffStr  = diffH > 0 ? `${diffH} Jam ${diffM} Menit` : `${diffMin} Menit`;
             const ok = await UI.confirm(
               '⏰ Sesi Belum Dimulai',
-              `<p>Jam test link sesi <strong>${sessLabel}</strong> belum dimulai. Test link berikutnya akan dimulai dalam <strong>${diffStr}</strong>.</p><p class="mt-2 text-amber-400 text-xs">⚠️ Link yang dibuka tidak akan tercatat saat sesi belum dimulai.</p>`,
-              'Tetap Buka', 'bg-amber-600'
+              `<p>Jam test link sesi <strong>${sessLabel}</strong> belum dimulai. Test link berikutnya akan dimulai dalam <strong>${diffStr}</strong>.</p>` +
+              `<p style="margin-top:.5rem;color:#fbbf24;font-size:.75rem">⚠️ Link yang dibuka tidak akan tercatat saat sesi belum dimulai.</p>`,
+              'Tetap Buka', 'bg-amber-600', true   // htmlMode=true
             );
             if (!ok) return;
           } else if (timer.status === 'expired') {
             const ok = await UI.confirm(
               '⏰ Sesi Sudah Berakhir',
-              `<p>Waktu test link sesi <strong>${sessLabel}</strong> sudah habis.</p><p class="mt-2 text-rose-400 text-xs">⚠️ Link yang dibuka tidak akan tercatat dalam sesi ini.</p>`,
-              'Tetap Buka', 'bg-rose-600'
+              `<p>Waktu test link sesi <strong>${sessLabel}</strong> sudah habis.</p>` +
+              `<p style="margin-top:.5rem;color:#f87171;font-size:.75rem">⚠️ Link yang dibuka tidak akan tercatat dalam sesi ini.</p>`,
+              'Tetap Buka', 'bg-rose-600', true   // htmlMode=true
             );
             if (!ok) return;
           }
