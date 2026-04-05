@@ -381,14 +381,14 @@ const App = (() => {
     // Digunakan untuk konfirmasi koneksi berasal dari provider lokal
     const INDO_ISP_RE = /telkom|telekomunikasi|xl axiata|xl |indosat|isat|hutchison|tri |smartfren|fren|axis |by\.?u|orbit|myrepublic|firstmedia|first media|cbn |biznet|oxygen|icon\+|mnc|linknet|maxis|iconnet|moratel|lintasarta|centrin|tkdn|gtl|net1|home credit|groovy|cbbn|max telecom/i;
 
-    // Fetch IP + info lokasi dari ipapi.co (HTTPS, gratis)
-    // Tambahkan timestamp agar browser tidak cache hasil (penting saat ganti VPN/IP)
+    // Fetch IP + info lokasi via backend proxy (/api/public/ipinfo → ipwho.is)
+    // Menggunakan backend untuk menghindari CORS, rate-limit browser, dan blokir ekstensi
     try {
-      const r = await fetch(`https://ipapi.co/json/?_=${Date.now()}`, {
-        cache: 'no-store',
-        headers: { 'Cache-Control': 'no-cache, no-store, must-revalidate', 'Pragma': 'no-cache' }
-      });
-      const d = await r.json();
+      const r = await fetch(`/api/public/ipinfo?_=${Date.now()}`, { cache: 'no-store' });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const resp = await r.json();
+      if (!resp.success) throw new Error(resp.error || 'Gagal memuat IP info');
+      const d = resp; // field: ip, country_code, country_name, city, region, org
 
       const ipFull     = d.ip || '—';
       // Trim IPv6 panjang: tampilkan 2 grup pertama + … + grup terakhir

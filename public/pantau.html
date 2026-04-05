@@ -118,19 +118,25 @@
       <div id="cat-link-rows"></div>
     </div>
 
-    <!-- Aktivitas terbaru -->
-    <p class="section-title">Aktivitas Terbaru</p>
-    <div class="card" style="overflow:hidden">
+    <!-- Aktivitas terbaru (paginasi) -->
+    <p class="section-title" style="display:flex;align-items:center;justify-content:space-between">
+      <span>Aktivitas Terbaru</span>
+      <span id="recent-page-info" style="font-size:.65rem;color:#94a3b8;font-weight:700"></span>
+    </p>
+    <div class="card" style="overflow:hidden;margin-bottom:.5rem">
       <div id="recent-list"></div>
     </div>
+    <div id="recent-pagination" style="display:flex;align-items:center;justify-content:center;gap:.5rem;margin-bottom:1.25rem"></div>
 
   </div><!-- /main-content -->
 </div>
 
 <script>
-const API_BASE = '/api';
+const API_BASE   = '/api';
 let pollInterval = null;
-let _lastData    = null;  // cache data terakhir untuk section link
+let _lastData    = null;   // cache data terakhir untuk section link
+let _recentPage  = 1;      // halaman aktif paginasi recent activity
+const RECENT_PER_PAGE = 10; // jumlah item per halaman
 
 // ── Helpers ───────────────────────────────────────────────────────────
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -263,21 +269,9 @@ function render(d) {
       }).join('')
     : '<p style="text-align:center;color:#475569;font-size:.8rem;padding:1.5rem 0;margin:0">Belum ada aktivitas hari ini.</p>';
 
-  // Aktivitas terbaru — tampilkan domain link
-  el('recent-list').innerHTML = (d.recent||[]).length
-    ? (d.recent||[]).map(r => {
-        const typeM = TYPE_META[r.type] || {icon:'🔗'};
-        return `<div class="recent-item">
-          <div style="width:28px;height:28px;border-radius:.5rem;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0">${typeM.icon}</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:.72rem;font-weight:600">@${esc(r.username)} · <span style="color:#94a3b8">${esc(r.category)}</span></div>
-            <div style="font-size:.65rem;font-family:monospace;color:#818cf8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.link_domain||'?')}</div>
-            <div style="font-size:.6rem;color:#64748b">${SESS_LABEL[r.session]||r.session} · ${fmt(r.at)}</div>
-          </div>
-          <div style="flex-shrink:0">${STATUS_TAG[r.status]||r.status}</div>
-        </div>`;
-      }).join('')
-    : '<p style="text-align:center;color:#475569;font-size:.8rem;padding:1.5rem 0;margin:0">Belum ada aktivitas terbaru.</p>';
+  // Aktivitas terbaru — simpan ke cache lalu render halaman pertama
+  _recentPage = 1;
+  renderRecentPage();
 }
 
 // ── Render Progress per Kategori & Link ───────────────────────────────
@@ -307,6 +301,66 @@ function renderCatLinks(catLinks) {
     </div>`;
   }).join('');
 }
+
+// ── Paginasi Recent Activity ──────────────────────────────────────────
+function renderRecentPage() {
+  const recent  = _lastData?.recent || [];
+  const total   = recent.length;
+  const pages   = Math.max(1, Math.ceil(total / RECENT_PER_PAGE));
+  _recentPage   = Math.min(_recentPage, pages);
+  const start   = (_recentPage - 1) * RECENT_PER_PAGE;
+  const items   = recent.slice(start, start + RECENT_PER_PAGE);
+
+  // Info halaman
+  const infoEl  = el('recent-page-info');
+  if (infoEl) infoEl.textContent = total ? `${start + 1}–${Math.min(start + RECENT_PER_PAGE, total)} / ${total}` : '';
+
+  // Render items
+  el('recent-list').innerHTML = items.length
+    ? items.map(r => {
+        const typeM = TYPE_META[r.type] || {icon:'🔗'};
+        return `<div class="recent-item">
+          <div style="width:28px;height:28px;border-radius:.5rem;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0">${typeM.icon}</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:.72rem;font-weight:600">@${esc(r.username)} · <span style="color:#94a3b8">${esc(r.category)}</span></div>
+            <div style="font-size:.65rem;font-family:monospace;color:#818cf8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.link_domain||'—')}</div>
+            <div style="font-size:.6rem;color:#64748b">${SESS_LABEL[r.session]||r.session} · ${fmt(r.at)}</div>
+          </div>
+          <div style="flex-shrink:0">${STATUS_TAG[r.status]||r.status}</div>
+        </div>`;
+      }).join('')
+    : '<p style="text-align:center;color:#475569;font-size:.8rem;padding:1.5rem 0;margin:0">Belum ada aktivitas terbaru.</p>';
+
+  // Tombol paginasi
+  const pag = el('recent-pagination');
+  if (!pag) return;
+  if (pages <= 1) { pag.innerHTML = ''; return; }
+  const btnStyle = (active) =>
+    `style="padding:5px 11px;border-radius:.5rem;font-size:.72rem;font-weight:700;cursor:pointer;border:1px solid;` +
+    (active
+      ? 'background:#6366f1;border-color:#6366f1;color:#fff;'
+      : 'background:rgba(99,102,241,.12);border-color:rgba(99,102,241,.3);color:#818cf8;') + '"';
+  let btns = '';
+  // Tombol ← dan →
+  btns += `<button ${btnStyle(false)} onclick="changePage(-1)" ${_recentPage===1?'disabled style="opacity:.4;cursor:default"':''}>←</button>`;
+  // Nomor halaman (maks 5 tombol)
+  const rangeStart = Math.max(1, _recentPage - 2);
+  const rangeEnd   = Math.min(pages, rangeStart + 4);
+  for (let p = rangeStart; p <= rangeEnd; p++) {
+    btns += `<button ${btnStyle(p===_recentPage)} onclick="gotoPage(${p})">${p}</button>`;
+  }
+  btns += `<button ${btnStyle(false)} onclick="changePage(1)" ${_recentPage===pages?'disabled style="opacity:.4;cursor:default"':''}>→</button>`;
+  pag.innerHTML = btns;
+}
+
+function changePage(delta) {
+  const total = _lastData?.recent?.length || 0;
+  const pages = Math.max(1, Math.ceil(total / RECENT_PER_PAGE));
+  _recentPage = Math.min(pages, Math.max(1, _recentPage + delta));
+  renderRecentPage();
+  el('recent-list')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function gotoPage(p) { _recentPage = p; renderRecentPage(); el('recent-list')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); }
 
 // ── Init ──────────────────────────────────────────────────────────────
 (async () => {

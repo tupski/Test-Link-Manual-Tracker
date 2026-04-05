@@ -25,31 +25,102 @@
   }
 
   /* ─── Light mode overrides ─────────────────────────── */
+  /* Warna dasar: biru-abu pucat, BUKAN putih murni */
   html.light body {
-    background: #f0f4ff;
-    color: #0f172a;
+    background: #e8eef8;
+    color: #1e293b;
   }
   html.light .gradient-bg {
-    background: linear-gradient(135deg, #dde8ff 0%, #f0f4ff 50%, #e8f0ff 100%);
+    background: linear-gradient(135deg, #c8d5ee 0%, #e8eef8 50%, #d4e1f7 100%);
   }
+  /* Glass card: biru-abu pucat semi-transparan */
   html.light .glass {
-    background: rgba(255, 255, 255, 0.75) !important;
-    border-color: rgba(99, 102, 241, 0.15) !important;
-    color: #0f172a;
+    background: rgba(228, 236, 252, 0.82) !important;
+    border-color: rgba(99, 102, 241, 0.18) !important;
+    color: #1e293b !important;
   }
-  html.light .text-white    { color: #0f172a !important; }
+
+  /* ─── Text rebalancing untuk kontras di latar terang ── */
+  html.light .text-white     { color: #1e293b !important; }
   html.light .text-slate-200 { color: #1e293b !important; }
   html.light .text-slate-300 { color: #334155 !important; }
   html.light .text-slate-400 { color: #475569 !important; }
   html.light .text-slate-500 { color: #64748b !important; }
-  html.light #weather-header { color: #fff; }
-  html.light #weather-header .text-white  { color: #fff !important; }
-  html.light #weather-header .text-slate-300\/80 { color: rgba(255,255,255,0.8) !important; }
-  html.light #bottom-nav .glass {
-    background: rgba(255, 255, 255, 0.92) !important;
-    border-color: rgba(0, 0, 0, 0.08) !important;
+  html.light .text-slate-600 { color: #64748b !important; }
+
+  /* Accent text — lebih gelap agar kontras di latar terang */
+  html.light .text-indigo-300 { color: #4338ca !important; }
+  html.light .text-indigo-400 { color: #4f46e5 !important; }
+  html.light .text-purple-300 { color: #6d28d9 !important; }
+  html.light .text-purple-400 { color: #7c3aed !important; }
+  html.light .text-emerald-400 { color: #059669 !important; }
+  html.light .text-emerald-300 { color: #059669 !important; }
+  html.light .text-rose-400   { color: #be123c !important; }
+  html.light .text-rose-300   { color: #be123c !important; }
+  html.light .text-amber-400  { color: #b45309 !important; }
+  html.light .text-amber-300  { color: #b45309 !important; }
+  html.light .text-slate-300\/80 { color: rgba(51,65,85,0.85) !important; }
+
+  /* ─── Input / form elements ─────────────────────────── */
+  html.light input,
+  html.light textarea,
+  html.light select {
+    background: rgba(214, 225, 245, 0.85) !important;
+    border-color: rgba(100, 116, 139, 0.3) !important;
+    color: #1e293b !important;
   }
-  html.light ::-webkit-scrollbar-thumb { background: #c7d2e6; }
+  html.light input::placeholder { color: #94a3b8 !important; }
+  html.light textarea::placeholder { color: #94a3b8 !important; }
+  html.light select option { background: #e8eef8 !important; color: #1e293b !important; }
+
+  /* ─── Tombol/card dengan background gelap ────────────── */
+  html.light button.bg-slate-800,
+  html.light .bg-slate-800 {
+    background: #dde6f5 !important;
+    color: #334155 !important;
+  }
+  html.light button.bg-slate-700,
+  html.light .bg-slate-700 {
+    background: #e2eaf6 !important;
+    color: #334155 !important;
+  }
+  /* Fallback untuk elemen ber-class slate-8xx dan slate-9xx */
+  html.light [class~="bg-slate-800"],
+  html.light [class~="bg-slate-900"] {
+    background-color: #dde6f5 !important;
+    color: #1e293b !important;
+  }
+  html.light [class~="bg-slate-700"] {
+    background-color: #e2eaf6 !important;
+    color: #1e293b !important;
+  }
+
+  /* ─── Badge/readiness states tetap berwarna ─────────── */
+  html.light #readiness-badge {
+    background: #e2eaf6 !important;
+    color: #475569 !important;
+  }
+
+  /* ─── Weather header tetap gelap (gradien) ───────────── */
+  html.light #weather-header { color: #fff; }
+  html.light #weather-header .text-white        { color: #fff !important; }
+  html.light #weather-header .text-slate-300\/80 { color: rgba(255,255,255,0.8) !important; }
+  html.light #weather-header .text-slate-300    { color: rgba(255,255,255,0.85) !important; }
+  html.light #weather-header h2,
+  html.light #weather-header #dash-clock        { color: #fff !important; }
+  html.light #weather-header .text-white\!      { color: #fff !important; }
+
+  /* ─── Bottom nav ─────────────────────────────────────── */
+  html.light #bottom-nav .glass {
+    background: rgba(232, 238, 252, 0.97) !important;
+    border-color: rgba(99, 102, 241, 0.12) !important;
+  }
+
+  /* ─── Modal overlay — hanya backdrop, bukan card ────── */
+  html.light .bg-black\/60 { background: rgba(0, 0, 0, 0.45) !important; }
+
+  /* ─── Scrollbar ──────────────────────────────────────── */
+  html.light ::-webkit-scrollbar-thumb { background: #b8c8e0; }
 }
 
 @layer components {

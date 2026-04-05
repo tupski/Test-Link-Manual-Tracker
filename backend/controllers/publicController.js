@@ -155,7 +155,7 @@ const getMonitorData = async (req, res, next) => {
       supabase.from('progress').select('link_id,category_id,session_name,status,user_id,updated_at').eq('date', date),
       supabase.from('session_config').select('id,session_name,start_hour,start_minute,normal_hours,max_hours').order('start_hour'),
       supabase.from('users').select('id,username,provider,last_seen'),
-      supabase.from('links').select('id,url,category_id').order('sort_order')
+      supabase.from('links').select('id,url,category_id').order('id')
     ]);
     const cats  = (rawCats || []).map(c => ({ ...c, link_count: c.links?.[0]?.count ?? 0 }));
     const totalLinks = cats.reduce((a, c) => a + Number(c.link_count), 0);
@@ -262,6 +262,58 @@ const getMonitorData = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
+/**
+ * GET /api/public/ipinfo
+ * Proxy server-side untuk mendapatkan info IP klien.
+ * Memanggil ipwho.is dengan IP klien dari header X-Forwarded-For.
+ * Tidak terkena rate-limit browser dan bebas CORS.
+ */
+const getIpInfo = async (req, res, next) => {
+  try {
+    // Ambil IP klien yang sesungguhnya (melalui proxy/Vercel)
+    const rawIp    = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.ip || '';
+    const clientIp = rawIp.split(',')[0].trim().replace(/^::ffff:/, ''); // strip IPv4-mapped IPv6
+
+    const url = clientIp
+      ? `https://ipwho.is/${clientIp}`
+      : 'https://ipwho.is/';
+
+    const controller = new AbortController();
+    const timeout    = setTimeout(() => controller.abort(), 5000);
+    let data;
+    try {
+      const r = await fetch(url, {
+        headers: { 'Accept': 'application/json', 'User-Agent': 'test-link-tracker/1.0' },
+        signal: controller.signal
+      });
+      data = await r.json();
+    } finally { clearTimeout(timeout); }
+
+    if (!data || !data.success) {
+      // Fallback: hanya IP saja via ipify
+      try {
+        const c2 = new AbortController();
+        const t2 = setTimeout(() => c2.abort(), 3000);
+        const r2 = await fetch('https://api.ipify.org?format=json', { signal: c2.signal });
+        clearTimeout(t2);
+        const d2 = await r2.json();
+        return res.json({ success: true, ip: d2.ip, country_code: null, city: null, region: null, org: null, country_name: null });
+      } catch { /* abaikan */ }
+      return res.status(503).json({ success: false, error: 'Gagal mendapatkan data IP.' });
+    }
+
+    res.json({
+      success:      true,
+      ip:           data.ip           || clientIp || null,
+      country_code: data.country_code || null,
+      country_name: data.country      || null,
+      city:         data.city         || null,
+      region:       data.region       || null,
+      org:          data.org          || data.connection?.org || null
+    });
+  } catch (err) { next(err); }
+};
+
 /** GET /api/public/monitor-config — hanya config tanpa data */
 const getMonitorConfig = async (req, res, next) => {
   try {
@@ -272,4 +324,4 @@ const getMonitorConfig = async (req, res, next) => {
   } catch(err){ next(err); }
 };
 
-module.exports = { getPublicCategories, getPublicLinks, getPublicSessions, getPublicStats, getMonitorData, getMonitorConfig };
+module.exports = { getPublicCategories, getPublicLinks, getPublicSessions, getPublicStats, getMonitorData, getMonitorConfig, getIpInfo };
