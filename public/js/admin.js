@@ -119,13 +119,25 @@ const Admin = (() => {
       </div>`).join('') || '<p class="text-center text-slate-500 text-sm py-8">Belum ada notifikasi.</p>';
   };
 
-  /** Render daftar user — dengan toggle reset_allowed, edit, dan hapus */
+  /** Render daftar user — dengan toggle reset_allowed, mark_all_done_allowed, edit, hapus */
   const renderUsers = async () => {
     const users = await API.getUsers();
     document.getElementById('users-count').textContent = `${users.length} user`;
     document.getElementById('admin-users-list').innerHTML = users.map(u => {
-      const resetOn  = !!u.reset_allowed;
-      const isAdmin  = u.role === 'admin';
+      const resetOn   = !!u.reset_allowed;
+      const doneOn    = !!u.mark_all_done_allowed;
+      const isAdmin   = u.role === 'admin';
+      const toggleRow = (label, icon, on, onclickAttr, descOn, descOff) => `
+        <div class="flex items-center justify-between px-3 py-2.5 rounded-xl mb-2 ${on?'bg-emerald-500/10 border border-emerald-500/20':'bg-slate-800/60 border border-slate-700/40'}">
+          <div>
+            <p class="text-xs font-semibold ${on?'text-emerald-300':'text-slate-400'}">${icon} ${label}</p>
+            <p class="text-[10px] text-slate-500">${on ? descOn : descOff}</p>
+          </div>
+          <button onclick="${onclickAttr}"
+            class="px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-all ${on?'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30':'bg-slate-700 text-slate-400 border border-slate-600'}">
+            ${on?'Nonaktifkan':'Aktifkan'}
+          </button>
+        </div>`;
       return `
       <div class="glass rounded-xl p-4">
         <div class="flex items-center gap-3 mb-3">
@@ -138,18 +150,12 @@ const Admin = (() => {
             <p class="text-[10px] text-slate-600">Terakhir: ${u.last_seen ? UI.formatDate(u.last_seen) : '-'}</p>
           </div>
         </div>
-        ${!isAdmin ? `
-        <!-- Toggle reset_allowed -->
-        <div class="flex items-center justify-between px-3 py-2.5 rounded-xl mb-2 ${resetOn?'bg-emerald-500/10 border border-emerald-500/20':'bg-slate-800/60 border border-slate-700/40'}">
-          <div>
-            <p class="text-xs font-semibold ${resetOn?'text-emerald-300':'text-slate-400'}">🔄 Reset Progress</p>
-            <p class="text-[10px] text-slate-500">${resetOn?'User dapat reset progress':'User tidak dapat reset'}</p>
-          </div>
-          <button onclick="App.adminToggleResetAllowed('${u.id}', ${!resetOn})"
-            class="px-3 py-1.5 rounded-lg text-xs font-bold active:scale-95 transition-all ${resetOn?'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30':'bg-slate-700 text-slate-400 border border-slate-600'}">
-            ${resetOn?'Nonaktifkan':'Aktifkan'}
-          </button>
-        </div>` : ''}
+        ${!isAdmin ? toggleRow('Reset Progress', '🔄', resetOn,
+            `App.adminToggleResetAllowed('${u.id}', ${!resetOn})`,
+            'User dapat reset progress', 'User tidak dapat reset') : ''}
+        ${!isAdmin ? toggleRow('Tombol Selesai', '✓', doneOn,
+            `App.adminToggleMarkAllDone('${u.id}', ${!doneOn})`,
+            'Tombol "✓ Semua Selesai" tampil', 'Tombol "✓ Semua Selesai" tersembunyi') : ''}
         <div class="flex gap-2">
           <button onclick="App.adminEditUser('${u.id}', '${u.username}', '${u.provider||''}')"
             class="flex-1 py-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400 text-xs font-semibold active:scale-95">✏️ Edit</button>

@@ -162,13 +162,13 @@ const Screens = (() => {
       ).join('<hr class="border-indigo-500/20 my-2"/>');
     } else { banner.classList.add('hidden'); }
 
-    // Badge status sesi
+    // Badge status sesi — warna sesuai status
     const badgeFor = (timer) => {
       const cls = {
-        active:   'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-        overtime: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-        expired:  'bg-slate-700 text-slate-500 border-slate-600',
-        waiting:  'bg-slate-700 text-slate-400 border-slate-600'
+        waiting:  'bg-amber-500/20  text-amber-400  border-amber-500/30',   // kuning — belum mulai
+        active:   'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',// hijau — berlangsung
+        overtime: 'bg-orange-500/20 text-orange-400 border-orange-500/30',  // jingga — overtime
+        expired:  'bg-rose-500/20   text-rose-400   border-rose-500/30'     // merah — selesai
       };
       return `<span class="text-[10px] font-bold px-2 py-0.5 rounded-lg border ${cls[timer.status] || cls.waiting}">${timer.label}</span>`;
     };
@@ -237,7 +237,7 @@ const Screens = (() => {
             <span class="text-2xl">${sessEmoji}</span>
             <div>
               <h3 class="font-bold text-base">${sessLabel}</h3>
-              <p class="text-slate-400 text-xs mt-0.5">${startLabel} WIB</p>
+              <p class="text-slate-400 text-xs mt-0.5">${timer.startLabel ? timer.startLabel : startLabel} WIB</p>
               <p class="text-slate-500 text-[10px] mt-0.5">${todayDisplay}</p>
             </div>
           </div>
@@ -253,7 +253,11 @@ const Screens = (() => {
           <div class="h-full ${pct===100?'bg-emerald-500':'bg-gradient-to-r from-indigo-500 to-purple-500'} rounded-full progress-bar" style="width:${pct}%"></div>
         </div>
       </div>`;
-    }).join('');
+    }).join('') +
+    // Tombol Riwayat Test Link — di bawah semua session cards
+    `<button onclick="App.navToHistory()" class="mt-1 w-full py-3 rounded-2xl glass border border-white/5 text-slate-400 font-semibold text-sm active:scale-95 transition-all flex items-center justify-center gap-2">
+      <span>📊</span> Riwayat Test Link
+    </button>`;
   };
 
   /** Render daftar kategori untuk satu sesi — dikelompokkan per tipe → per group_name */
@@ -292,7 +296,12 @@ const Screens = (() => {
 
     const timer   = UI.sessionTimer(sess.start_hour, sess.start_minute, sess.normal_hours, sess.max_hours);
     const timerEl = document.getElementById('cat-timer');
-    const tColors = { active:'bg-emerald-500/10 text-emerald-400', overtime:'bg-amber-500/10 text-amber-400', expired:'bg-slate-800 text-slate-500', waiting:'bg-slate-800 text-slate-400' };
+    const tColors = {
+      waiting:  'bg-amber-500/10  text-amber-400',
+      active:   'bg-emerald-500/10 text-emerald-400',
+      overtime: 'bg-orange-500/10 text-orange-400',
+      expired:  'bg-rose-500/10   text-rose-400'
+    };
     timerEl.className   = `text-xs font-semibold px-3 py-1.5 rounded-xl ${tColors[timer.status] || tColors.waiting}`;
     timerEl.textContent = timer.label;
 
@@ -311,7 +320,7 @@ const Screens = (() => {
       const pct     = total ? Math.round(done / total * 100) : 0;
       const isDone  = total > 0 && done >= total;
       const updated = cat.links_updated_at ? UI.formatDate(cat.links_updated_at) : '-';
-      return `<div class="glass rounded-xl p-4 active:scale-[.98] transition-all cursor-pointer ${isDone ? 'border-emerald-500/20' : ''}" onclick="App.openCategory(${cat.id}, '${cat.name.replace(/'/g,"\\'")}')">
+      return `<div class="cat-card glass rounded-xl p-4 active:scale-[.98] transition-all cursor-pointer ${isDone ? 'border-emerald-500/20' : ''}" data-done="${isDone}" onclick="App.openCategory(${cat.id}, '${cat.name.replace(/'/g,"\\'")}')">
         <div class="flex items-center justify-between mb-2">
           <h3 class="font-semibold text-sm truncate flex-1">${cat.name}</h3>
           ${isDone ? '<span class="text-emerald-400 text-xs font-bold ml-2 shrink-0">✓ Selesai</span>' : `<span class="text-xs text-slate-400">${done}/${total}</span>`}
@@ -487,12 +496,37 @@ const Screens = (() => {
     const progress = await API.getProgress(today, sessionName);
     const sessNum  = { pagi: 1, siang: 2, malam: 3 };
     const num      = sessNum[sessionName] || 1;
+    const prov     = provider || 'Tidak diketahui';
 
-    // Waktu WIB saat generate (= waktu selesai test)
-    const wibNow  = new Date(Date.now() + 7 * 3600000);
-    const tgl     = wibNow.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
-    const jam     = String(wibNow.getUTCHours()).padStart(2, '0') + ':' + String(wibNow.getUTCMinutes()).padStart(2, '0');
-    const prov    = provider || 'Tidak diketahui';
+    /**
+     * Helper: ambil waktu selesai test untuk tipe tertentu.
+     * Gunakan max(updated_at) dari progress link di kategori tipe tersebut.
+     * Fallback ke waktu sekarang jika tidak ada data.
+     */
+    const _completionTimeFor = (typeCats) => {
+      const catIds = typeCats.map(c => c.id);
+      const typeProg = progress.filter(p => catIds.includes(p.category_id) && p.updated_at);
+      if (!typeProg.length) return null;
+      // Ambil yang paling baru
+      const maxUpdated = typeProg.reduce((max, p) => p.updated_at > max ? p.updated_at : max, '');
+      return maxUpdated ? new Date(maxUpdated) : null;
+    };
+
+    const _formatWaktu = (dateObj) => {
+      if (!dateObj) {
+        const wibNow = new Date(Date.now() + 7 * 3600000);
+        return {
+          tgl: wibNow.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+          jam: String(wibNow.getUTCHours()).padStart(2,'0') + ':' + String(wibNow.getUTCMinutes()).padStart(2,'0')
+        };
+      }
+      // Konversi UTC ke WIB (UTC+7)
+      const wib = new Date(dateObj.getTime() + 7 * 3600000);
+      return {
+        tgl: wib.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }),
+        jam: String(wib.getUTCHours()).padStart(2,'0') + ':' + String(wib.getUTCMinutes()).padStart(2,'0')
+      };
+    };
 
     // Ambil semua link paralel
     const linksMap = {};
@@ -513,6 +547,10 @@ const Screens = (() => {
     sections.forEach(sec => {
       const typeCats = cats.filter(c => c.type === sec.type);
       if (!typeCats.length) return;
+
+      // Waktu selesai diambil dari max updated_at progress untuk tipe ini
+      const completionDate = _completionTimeFor(typeCats);
+      const { tgl, jam } = _formatWaktu(completionDate);
 
       report += `${sec.title} #${num}\n`;
       report += `Cache & Cookies cleared ✅\n\n`;
@@ -576,7 +614,21 @@ const Screens = (() => {
   const _renderHistChart = (data) => {
     const el = document.getElementById('hist-chart');
     if (!el) return;
-    if (!data.length) { el.innerHTML = '<p class="text-center text-slate-500 text-sm py-4">Belum ada data.</p>'; return; }
+
+    // Filter pills — di atas grafik
+    const pills = ['', 'pagi', 'siang', 'malam'];
+    const pillLabels = { '': 'Semua', pagi: '🌅 Pagi', siang: '🌇 Sore', malam: '🌙 Malam' };
+    const filterHtml = `<div class="flex gap-2 mb-4 overflow-x-auto pb-1">
+      ${pills.map(s => {
+        const active = _histSess === s;
+        return `<button onclick="App.histFilterSess('${s}')" class="hist-sess-btn shrink-0 text-xs font-bold px-3 py-1.5 rounded-xl border transition-all active:scale-95 ${active ? 'bg-indigo-600/30 border-indigo-500/40 text-indigo-300' : 'bg-slate-800/50 border-slate-700/30 text-slate-400'}" data-sess="${s}">${pillLabels[s]}</button>`;
+      }).join('')}
+    </div>`;
+
+    if (!data.length) {
+      el.innerHTML = filterHtml + '<p class="text-center text-slate-500 text-sm py-4">Belum ada data.</p>';
+      return;
+    }
 
     const SESS_EMOJI = { pagi: '🌅', siang: '🌇', malam: '🌙' };
     const SESS_COLOR = { pagi: '#6366f1', siang: '#f59e0b', malam: '#8b5cf6' };
@@ -596,7 +648,7 @@ const Screens = (() => {
       </div>`;
     }).join('');
 
-    el.innerHTML = `<div style="display:flex;gap:6px;align-items:flex-end;height:130px;overflow-x:auto">${bars}</div>
+    el.innerHTML = filterHtml + `<div style="display:flex;gap:6px;align-items:flex-end;height:130px;overflow-x:auto">${bars}</div>
       <div style="display:flex;gap:12px;justify-content:center;margin-top:.75rem;font-size:.65rem;color:#64748b">
         <span>🌅 Pagi</span><span>🌇 Sore</span><span>🌙 Malam</span>
       </div>`;

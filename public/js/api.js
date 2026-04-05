@@ -75,7 +75,8 @@ const API = (() => {
     // ── Users (admin) ────────────────────────────────────────
     getUsers:           ()           => req('GET',   '/users'),
     adminUpdateUser:    (id, data)   => req('PATCH', `/users/${id}`, data),
-    toggleResetAllowed: (id, allowed)=> req('PATCH', `/users/${id}/reset-allowed`, { allowed }),
+    toggleResetAllowed:       (id, allowed) => req('PATCH', `/users/${id}/reset-allowed`,    { allowed }),
+    toggleMarkAllDoneAllowed: (id, allowed) => req('PATCH', `/users/${id}/mark-done-allowed`, { allowed }),
     deleteUser:         (id)         => req('DELETE',`/users/${id}`),
 
     // ── Auth: update profil sendiri ───────────────────────────

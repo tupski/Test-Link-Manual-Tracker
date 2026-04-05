@@ -43,10 +43,17 @@ const App = (() => {
       showScreen(going, false);
       // Re-render otomatis agar statistik selalu update
       if (going === 'screen-categories' && state.currentSession) {
-        Screens.renderCategories(state.currentSession).catch(e => UI.toast(e.message, 'error'));
+        Screens.renderCategories(state.currentSession)
+          .then(() => setTimeout(_scrollToFirstIncompleteCategory, 200))
+          .catch(e => UI.toast(e.message, 'error'));
       } else if (going === 'screen-dashboard') {
         loadDashboard();
       }
+      // Update nav active state saat goBack
+      if (going === 'screen-dashboard') setActiveNav('home');
+      else if (['screen-testlink','screen-categories','screen-links'].includes(going)) setActiveNav('testlink');
+      else if (going === 'screen-notif') setActiveNav('notif');
+      else if (going === 'screen-admin' || going?.startsWith?.('screen-admin-')) setActiveNav('admin');
     } else {
       showScreen('screen-dashboard', false);
       loadDashboard();
@@ -864,8 +871,28 @@ const App = (() => {
     try {
       await Screens.renderCategories(sessionName);
       showScreen('screen-categories');
+      // Scroll ke kategori pertama yang belum selesai
+      setTimeout(_scrollToFirstIncompleteCategory, 200);
     } catch (e) { UI.toast(e.message, 'error'); }
     finally { UI.loading(false); }
+  };
+
+  /**
+   * Scroll halaman ke kategori pertama yang belum selesai.
+   * Dipanggil setelah renderCategories selesai dan saat kembali dari screen-links.
+   */
+  const _scrollToFirstIncompleteCategory = () => {
+    const incomplete = document.querySelector('#cats-list .cat-card:not([data-done="true"])');
+    if (incomplete) incomplete.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  /**
+   * Scroll ke link pertama yang belum dibuka (belum punya data-opened attribute).
+   * Dipanggil dari tombol "Link yang Belum Ditest".
+   */
+  const scrollToUnopened = () => {
+    const unopened = document.querySelector('#links-list [data-prog-link]:not([data-opened])');
+    if (unopened) unopened.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   /**
@@ -961,6 +988,17 @@ const App = (() => {
     try {
       await Screens.renderLinks(catId, catName, state.currentSession);
       showScreen('screen-links');
+
+      // ── Toggle visibility tombol berdasarkan flag akun user ──
+      const isAdmin          = state.user?.role === 'admin';
+      const markDoneAllowed  = isAdmin || !!state.user?.mark_all_done_allowed;
+      const resetAllowed     = isAdmin || !!state.user?.reset_allowed;
+      document.getElementById('btn-mark-all-done')?.classList.toggle('hidden', !markDoneAllowed);
+      document.getElementById('btn-reset-category')?.classList.toggle('hidden', !resetAllowed);
+
+      // ── Tampilkan tombol scroll ke link belum ditest jika ada ──
+      const hasUnopened = !!document.querySelector('#links-list [data-prog-link]:not([data-opened])');
+      document.getElementById('btn-scroll-untest')?.classList.toggle('hidden', !hasUnopened);
     } catch (e) { UI.toast(e.message, 'error'); }
     finally { UI.loading(false); }
   };
@@ -2241,11 +2279,20 @@ const App = (() => {
       } catch (e) { UI.toast(e.message, 'error'); }
       finally { UI.loading(false); }
     },
+    adminToggleMarkAllDone: async (id, allowed) => {
+      UI.loading(true);
+      try {
+        await API.toggleMarkAllDoneAllowed(id, allowed);
+        UI.toast(`Tombol Selesai ${allowed ? 'diaktifkan' : 'dinonaktifkan'} untuk user.`, 'success');
+        await Admin.renderUsers();
+      } catch (e) { UI.toast(e.message, 'error'); }
+      finally { UI.loading(false); }
+    },
     adminAddProvider, adminDeleteProvider, adminCycleType, adminSetCategoryGroup,
     adminAddWhitelist, adminRemoveWhitelist, adminRenderWhitelist,
     adminAddPanduan, adminEditPanduan, adminDeletePanduan, closePanduanEditor,
     savePassword, removePassword,
-    refreshReadiness, runSpeedTest,
+    refreshReadiness, runSpeedTest, scrollToUnopened,
     installPWA, dismissInstall,
     kirimLaporan, closeReportModal, copyReport, shareSignal,
     toggleTheme,

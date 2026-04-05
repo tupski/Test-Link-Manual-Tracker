@@ -28,9 +28,22 @@ const toggleResetAllowed = async (req, res, next) => {
     const { allowed } = req.body;
     if (typeof allowed !== 'boolean')
       return res.status(400).json({ error: 'Field "allowed" harus boolean.' });
-
     const { data, error } = await supabase
       .from('users').update({ reset_allowed: allowed }).eq('id', id).select().single();
+    if (error) return next(error);
+    res.json(data);
+  } catch (err) { next(err); }
+};
+
+/** PATCH /api/users/:id/mark-done-allowed — admin toggle mark_all_done_allowed */
+const toggleMarkAllDoneAllowed = async (req, res, next) => {
+  try {
+    const { id }      = req.params;
+    const { allowed } = req.body;
+    if (typeof allowed !== 'boolean')
+      return res.status(400).json({ error: 'Field "allowed" harus boolean.' });
+    const { data, error } = await supabase
+      .from('users').update({ mark_all_done_allowed: allowed }).eq('id', id).select().single();
     if (error) return next(error);
     res.json(data);
   } catch (err) { next(err); }
@@ -120,4 +133,4 @@ const removeMyPassword = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getUsers, toggleResetAllowed, updateUser, deleteUser, setMyPassword, removeMyPassword };
+module.exports = { getUsers, toggleResetAllowed, toggleMarkAllDoneAllowed, updateUser, deleteUser, setMyPassword, removeMyPassword };

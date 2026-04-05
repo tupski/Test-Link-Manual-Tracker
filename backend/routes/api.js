@@ -14,7 +14,7 @@ const { login, me, updateMe }              = require('../controllers/authControl
 const { getCategories, createCategory, renameCategory, deleteCategory } = require('../controllers/categoriesController');
 const { getLinks, saveLinks, deleteLink }   = require('../controllers/linksController');
 const { getProgress, getHistory, markOpened, updateStatus, markAllOpened, resetProgress, onSessionStart } = require('../controllers/progressController');
-const { getUsers, toggleResetAllowed, updateUser, deleteUser } = require('../controllers/usersController');
+const { getUsers, toggleResetAllowed, toggleMarkAllDoneAllowed, updateUser, deleteUser } = require('../controllers/usersController');
 const { getSessions, updateSession }        = require('../controllers/configController');
 const { getNotifications, getAllNotifications, createNotification, updateNotification, deleteNotification, dismissNotification } = require('../controllers/notificationsController');
 const { getProviders, createProvider, deleteProvider } = require('../controllers/providersController');
@@ -53,6 +53,7 @@ router.delete('/progress',             requireAuth, resetProgress);
 router.get('/users',                          requireAuth, requireAdmin, getUsers);
 router.patch('/users/:id',                    requireAuth, requireAdmin, updateUser);
 router.patch('/users/:id/reset-allowed',      requireAuth, requireAdmin, toggleResetAllowed);
+router.patch('/users/:id/mark-done-allowed',  requireAuth, requireAdmin, toggleMarkAllDoneAllowed);
 router.delete('/users/:id',                   requireAuth, requireAdmin, deleteUser);
 
 // ── Konfigurasi sesi ──────────────────────────────────────────────────

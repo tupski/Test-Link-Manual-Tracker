@@ -86,27 +86,37 @@ const UI = (() => {
   /** Format jam:menit */
   const formatTime = (h, m = 0) => `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
 
-  /** Hitung sisa/overtime waktu sesi */
+  /** Hitung sisa/overtime waktu sesi + countdown ke mulai jika belum dimulai */
   const sessionTimer = (startH, startM, normalH, maxH) => {
     const now       = new Date();
     const wibOffset = 7 * 60;
     const utcMin    = now.getUTCHours() * 60 + now.getUTCMinutes();
     const wibMin    = (utcMin + wibOffset) % (24 * 60);
 
-    const startMin  = startH * 60 + startM;
-    const endMin    = startMin + normalH * 60;
-    const maxMin    = startMin + maxH * 60;
+    const startMin  = (startH || 0) * 60 + (startM || 0);
+    const endMin    = startMin + (normalH || 2) * 60;
+    const maxMin    = startMin + (maxH || 3) * 60;
 
     const diff      = wibMin - startMin;
-    if (diff < 0)   return { status: 'waiting', label: `Mulai ${formatTime(startH, startM)} WIB` };
-    if (diff > maxH * 60) return { status: 'expired', label: 'Waktu habis' };
 
-    const remaining = (diff < normalH * 60) ? endMin - wibMin : maxMin - wibMin;
+    // Belum mulai — tampilkan countdown ke waktu mulai
+    if (diff < 0) {
+      const waitMin = -diff;
+      const wh = Math.floor(waitMin / 60), wm = waitMin % 60;
+      const cdStr = wh > 0 ? `${wh}j ${wm}m lagi` : `${wm}m lagi`;
+      return { status: 'waiting', label: `⏳ ${cdStr}`, startLabel: formatTime(startH, startM) };
+    }
+
+    // Sudah lewat max — selesai
+    if (diff > (maxH || 3) * 60) return { status: 'expired', label: 'Selesai' };
+
+    // Aktif — tampilkan sisa waktu (normal atau max)
+    const remaining = (diff < (normalH || 2) * 60) ? endMin - wibMin : maxMin - wibMin;
     const h = Math.floor(remaining / 60);
     const m = remaining % 60;
     const label = h > 0 ? `${h}j ${m}m` : `${m}m`;
 
-    if (diff >= normalH * 60) return { status: 'overtime', label: `⚠️ Overtime · ${label}` };
+    if (diff >= (normalH || 2) * 60) return { status: 'overtime', label: `⚠️ Overtime · ${label}` };
     return { status: 'active', label: `⏱ Sisa ${label}` };
   };
 
