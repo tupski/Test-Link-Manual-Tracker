@@ -7,13 +7,19 @@
 
 const supabase = require('../models/supabase');
 
-/** GET /api/notifications — ambil notifikasi aktif */
+/** GET /api/notifications — ambil notifikasi aktif untuk user ini
+ *  - Notif global (user_id IS NULL) → semua user bisa lihat
+ *  - Notif individual (user_id = req.user.id) → hanya user tersebut
+ */
 const getNotifications = async (req, res, next) => {
   try {
+    const userId = req.user?.id;
+    // Ambil notifikasi global + notifikasi khusus user ini
     const { data, error } = await supabase
       .from('notifications')
       .select('*')
       .eq('is_active', true)
+      .or(`user_id.is.null,user_id.eq.${userId}`)
       .order('created_at', { ascending: false });
 
     if (error) return next(error);
@@ -79,4 +85,28 @@ const deleteNotification = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getNotifications, getAllNotifications, createNotification, updateNotification, deleteNotification };
+/**
+ * PATCH /api/notifications/:id/dismiss — user nonaktifkan notifikasi sendiri.
+ * Hanya bisa set is_active = false. Tidak butuh admin.
+ * User hanya bisa dismiss notif global (user_id IS NULL) atau notif miliknya sendiri.
+ */
+const dismissNotification = async (req, res, next) => {
+  try {
+    const { id }   = req.params;
+    const userId   = req.user.id;
+
+    // Cek kepemilikan: hanya boleh dismiss miliknya sendiri atau notif global
+    const { data: notif, error: fetchErr } = await supabase
+      .from('notifications').select('id, user_id').eq('id', id).single();
+    if (fetchErr || !notif) return res.status(404).json({ error: 'Notifikasi tidak ditemukan.' });
+    if (notif.user_id && notif.user_id !== userId)
+      return res.status(403).json({ error: 'Tidak bisa menghapus notifikasi milik user lain.' });
+
+    const { data, error } = await supabase
+      .from('notifications').update({ is_active: false }).eq('id', id).select().single();
+    if (error) return next(error);
+    res.json(data);
+  } catch (err) { next(err); }
+};
+
+module.exports = { getNotifications, getAllNotifications, createNotification, updateNotification, deleteNotification, dismissNotification };

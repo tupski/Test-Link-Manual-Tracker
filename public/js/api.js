@@ -68,7 +68,8 @@ const API = (() => {
     getNotifications:    ()       => req('GET',  '/notifications'),
     getAllNotifications:  ()       => req('GET',  '/notifications/all'),
     addNotification:     (data)   => req('POST', '/notifications', data),
-    updateNotification:  (id, d)  => req('PATCH',`/notifications/${id}`, d),
+    updateNotification:  (id, d)  => req('PATCH', `/notifications/${id}`, d),
+    dismissNotification: (id)     => req('PATCH', `/notifications/${id}/dismiss`, {}),
     deleteNotification:  (id)     => req('DELETE',`/notifications/${id}`),
 
     // ── Users (admin) ────────────────────────────────────────

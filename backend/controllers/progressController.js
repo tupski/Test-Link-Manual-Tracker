@@ -162,34 +162,38 @@ const onSessionStart = async (req, res, next) => {
 
     const userId = req.user.id;
 
-    // Cek apakah user punya data untuk sesi ini hari ini
+    // Hanya hapus progress dengan status 'opened' (dibuka tapi belum dikonfirmasi).
+    // Progress yang sudah dikonfirmasi (normal/blocked/error_404) TIDAK dihapus — data tetap aman.
     const { data: existing, error: chkErr } = await supabase.from('progress')
-      .select('id', { count: 'exact' })
+      .select('id')
       .eq('user_id', userId)
       .eq('session_name', session_name)
-      .eq('date', date);
+      .eq('date', date)
+      .eq('status', 'opened');
 
     if (chkErr) return next(chkErr);
 
     const count = existing?.length || 0;
     if (count === 0) return res.json({ success: true, deleted: 0, notified: false });
 
-    // Hapus semua progress user untuk sesi ini hari ini
+    // Hapus HANYA yang status='opened' (belum dilaporkan)
     const { error: delErr } = await supabase.from('progress')
       .delete()
       .eq('user_id', userId)
       .eq('session_name', session_name)
-      .eq('date', date);
+      .eq('date', date)
+      .eq('status', 'opened');
 
     if (delErr) return next(delErr);
 
-    // Buat notifikasi in-app untuk user
+    // Buat notifikasi in-app khusus untuk user ini (user_id disertakan)
     const SESS_LABEL = { pagi: 'Pagi', siang: 'Sore', malam: 'Malam' };
     const label = SESS_LABEL[session_name] || session_name;
     const { error: notifErr } = await supabase.from('notifications').insert({
-      title:     `🔄 Data Sesi ${label} Dihapus`,
-      message:   `Sesi ${label} baru saja dimulai. Data test link sebelumnya (${count} link) telah dihapus otomatis untuk memulai sesi yang bersih.`,
-      is_active: true,
+      title:      `🔄 Data Sesi ${label} Dibersihkan`,
+      message:    `Sesi ${label} dimulai. ${count} link yang belum dilaporkan (status "dibuka") dihapus otomatis.`,
+      is_active:  true,
+      user_id:    userId,  // notifikasi hanya tampil untuk user ini
       created_at: new Date().toISOString()
     });
 

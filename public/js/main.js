@@ -681,10 +681,8 @@ const App = (() => {
   // ── Nav helpers ───────────────────────────────────────────
   /** Navigasi ke Test Link screen (session cards) */
   const navToTestLink = async () => {
+    setActiveNav('testlink');
     _showScreenWithLoad('screen-testlink');
-    // Update nav active state
-    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector('[data-nav="testlink"]')?.classList.add('active');
   };
 
   // ── Profile Bottom Drawer ─────────────────────────────────
@@ -1344,8 +1342,19 @@ const App = (() => {
   };
 
   // ── Bottom Nav ─────────────────────────────────────────────
+  /** Set active state pada tombol nav sesuai key */
+  const setActiveNav = (key) => {
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+    const btn = document.querySelector(`[data-nav="${key}"]`);
+    if (btn) btn.classList.add('active');
+  };
+
   const navTo = (key) => {
-    if (key === 'home') { showScreen('screen-dashboard'); loadDashboard(); }
+    if (key === 'home') {
+      setActiveNav('home');
+      showScreen('screen-dashboard');
+      loadDashboard();
+    }
   };
 
   /** Navigasi ke screen Panduan Test Link + render konten dari DB */
@@ -1473,6 +1482,43 @@ const App = (() => {
     finally { UI.loading(false); }
   };
 
+  /**
+   * Speed test sederhana — ukur kecepatan download dengan mengunduh gambar test kecil.
+   * Tampilkan hasil di elemen #rd-speed.
+   */
+  const runSpeedTest = async () => {
+    const speedEl = document.getElementById('rd-speed');
+    const btnEl   = document.getElementById('btn-speed-test');
+    if (!speedEl || !btnEl) return;
+
+    speedEl.textContent = '⏳ Mengukur...';
+    btnEl.disabled = true;
+    btnEl.textContent = '...';
+
+    try {
+      // Gunakan file 200KB dari Cloudflare untuk akurasi lebih baik
+      const testUrl = `https://speed.cloudflare.com/__down?bytes=200000&_=${Date.now()}`;
+      const startMs = performance.now();
+      const res     = await fetch(testUrl, { cache: 'no-store' });
+      await res.blob();
+      const durSec  = (performance.now() - startMs) / 1000;
+      const mbps    = ((200000 * 8) / durSec / 1_000_000).toFixed(2); // Mbps
+
+      let quality = '';
+      const mbpsNum = parseFloat(mbps);
+      if (mbpsNum >= 10)      quality = '🟢 Stabil';
+      else if (mbpsNum >= 3)  quality = '🟡 Cukup';
+      else                    quality = '🔴 Lambat';
+
+      speedEl.textContent = `${mbps} Mbps ${quality}`;
+    } catch {
+      speedEl.textContent = '❌ Gagal (blokir CORS)';
+    } finally {
+      btnEl.disabled = false;
+      btnEl.textContent = 'Uji ulang';
+    }
+  };
+
   /** Navigasi ke screen Tentang Aplikasi */
   const navToTentang = () => {
     closeProfileDrawer();
@@ -1511,10 +1557,10 @@ const App = (() => {
     setActiveNav('notif');
   };
 
-  /** Hapus satu notifikasi (dari sisi user — nonaktifkan via API) */
+  /** Hapus satu notifikasi — user gunakan endpoint /dismiss (tidak butuh admin) */
   const dismissNotif = async (id) => {
     try {
-      await API.updateNotification(id, { is_active: false });
+      await API.dismissNotification(id);
       await renderNotifScreen();
       _updateNotifBadge().catch(() => {});
     } catch (e) { UI.toast(e.message, 'error'); }
@@ -1588,7 +1634,7 @@ const App = (() => {
     } catch (e) { UI.toast(e.message, 'error'); }
   };
   // navToSession di-expose sebagai alias navToTestLink di return object
-  const navToAdmin = () => { showScreen('screen-admin'); };
+  const navToAdmin = () => { setActiveNav('admin'); showScreen('screen-admin'); };
 
   // ── Admin Actions ──────────────────────────────────────────
   const adminAddCategory = async () => {
@@ -2199,7 +2245,7 @@ const App = (() => {
     adminAddWhitelist, adminRemoveWhitelist, adminRenderWhitelist,
     adminAddPanduan, adminEditPanduan, adminDeletePanduan, closePanduanEditor,
     savePassword, removePassword,
-    refreshReadiness,
+    refreshReadiness, runSpeedTest,
     installPWA, dismissInstall,
     kirimLaporan, closeReportModal, copyReport, shareSignal,
     toggleTheme,

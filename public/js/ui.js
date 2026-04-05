@@ -116,7 +116,21 @@ const UI = (() => {
     return d.toISOString().slice(0, 10);
   };
 
-  return { toast, loading, confirm, inputModal, formatDate, formatTime, sessionTimer, todayWIB };
+  /**
+   * Toggle visibilitas password field + update ikon mata.
+   * @param {string} inputId - id dari input field
+   * @param {string} iconId  - id dari span yang berisi ikon mata
+   */
+  const togglePwd = (inputId, iconId) => {
+    const inp  = document.getElementById(inputId);
+    const icon = document.getElementById(iconId);
+    if (!inp) return;
+    const isHidden = inp.type === 'password';
+    inp.type = isHidden ? 'text' : 'password';
+    if (icon) icon.textContent = isHidden ? '🙈' : '👁️';
+  };
+
+  return { toast, loading, confirm, inputModal, formatDate, formatTime, sessionTimer, todayWIB, togglePwd };
 })();
 
 /** Tutup modal confirm saat klik backdrop */

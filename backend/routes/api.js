@@ -16,7 +16,7 @@ const { getLinks, saveLinks, deleteLink }   = require('../controllers/linksContr
 const { getProgress, getHistory, markOpened, updateStatus, markAllOpened, resetProgress, onSessionStart } = require('../controllers/progressController');
 const { getUsers, toggleResetAllowed, updateUser, deleteUser } = require('../controllers/usersController');
 const { getSessions, updateSession }        = require('../controllers/configController');
-const { getNotifications, getAllNotifications, createNotification, updateNotification, deleteNotification } = require('../controllers/notificationsController');
+const { getNotifications, getAllNotifications, createNotification, updateNotification, deleteNotification, dismissNotification } = require('../controllers/notificationsController');
 const { getProviders, createProvider, deleteProvider } = require('../controllers/providersController');
 const { getAppConfig, updateAppConfig }     = require('../controllers/appConfigController');
 const { getPublicCategories, getPublicLinks, getPublicSessions, getPublicStats, getMonitorData, getMonitorConfig, getIpInfo } = require('../controllers/publicController');
@@ -60,11 +60,12 @@ router.get('/config/sessions',       requireAuth, getSessions);
 router.patch('/config/sessions/:id', requireAuth, requireAdmin, updateSession);
 
 // ── Notifikasi ────────────────────────────────────────────────────────
-router.get('/notifications',         requireAuth, getNotifications);
-router.get('/notifications/all',     requireAuth, requireAdmin, getAllNotifications);
-router.post('/notifications',        requireAuth, requireAdmin, createNotification);
-router.patch('/notifications/:id',   requireAuth, requireAdmin, updateNotification);
-router.delete('/notifications/:id',  requireAuth, requireAdmin, deleteNotification);
+router.get   ('/notifications',             requireAuth,                    getNotifications);
+router.get   ('/notifications/all',         requireAuth, requireAdmin,       getAllNotifications);
+router.post  ('/notifications',             requireAuth, requireAdmin,       createNotification);
+router.patch ('/notifications/:id/dismiss', requireAuth,                    dismissNotification); // user dismiss milik sendiri
+router.patch ('/notifications/:id',         requireAuth, requireAdmin,       updateNotification);
+router.delete('/notifications/:id',         requireAuth, requireAdmin,       deleteNotification);
 
 // ── Providers ─────────────────────────────────────────────────────────
 // GET publik (tanpa auth) agar dropdown login bisa tampil sebelum masuk

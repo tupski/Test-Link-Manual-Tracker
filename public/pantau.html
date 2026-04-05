@@ -1,28 +1,45 @@
 <!DOCTYPE html>
-<html lang="id" class="dark">
+<html lang="id" id="pantau-html">
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>📡 Pantau Test Link</title>
 <link rel="stylesheet" href="/css/style.css"/>
 <style>
-  body{background:#0f172a;color:#f1f5f9;font-family:system-ui,sans-serif;min-height:100dvh;margin:0}
-  .card{background:rgba(30,41,59,.65);border:1px solid rgba(255,255,255,.08);border-radius:1rem;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  /* ── Base ── */
+  :root{--bg:#0f172a;--bg2:rgba(30,41,59,.65);--txt:#f1f5f9;--txt2:#94a3b8;--brd:rgba(255,255,255,.08);--hdr:rgba(15,23,42,.88)}
+  .light{--bg:#f1f5f9;--bg2:rgba(255,255,255,.75);--txt:#0f172a;--txt2:#64748b;--brd:rgba(0,0,0,.08);--hdr:rgba(241,245,249,.92)}
+  body{background:var(--bg);color:var(--txt);font-family:system-ui,sans-serif;min-height:100dvh;margin:0;transition:background .3s,color .3s}
+  .card{background:var(--bg2);border:1px solid var(--brd);border-radius:1rem;backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+  /* ── Header sticky ── */
+  .pantau-header{position:sticky;top:0;z-index:30;background:var(--hdr);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid var(--brd);padding:.75rem 1rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem}
+  .pantau-header h1{font-size:1rem;font-weight:900;margin:0;color:var(--txt)}
+  .pantau-header .hdate{font-size:.72rem;color:var(--txt2);margin:2px 0 0}
+  .hdr-btn{background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.3);color:#818cf8;border-radius:.5rem;padding:5px 12px;font-size:.8rem;cursor:pointer;font-weight:700;white-space:nowrap;transition:all .15s;flex-shrink:0}
+  .hdr-btn:hover{background:rgba(99,102,241,.3)}
+  /* ── User picker overlay ── */
+  #user-picker-overlay{position:fixed;inset:0;z-index:50;background:var(--bg);display:flex;align-items:center;justify-content:center;padding:1rem}
+  #user-picker-overlay .picker-card{background:var(--bg2);border:1px solid var(--brd);border-radius:1.25rem;padding:1.5rem;width:100%;max-width:400px;backdrop-filter:blur(12px)}
+  .user-pick-btn{width:100%;display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-radius:.75rem;border:1px solid var(--brd);background:rgba(99,102,241,.06);cursor:pointer;transition:all .15s;margin-bottom:.5rem;color:var(--txt);text-align:left}
+  .user-pick-btn:hover,.user-pick-btn:active{background:rgba(99,102,241,.18);border-color:rgba(99,102,241,.4)}
+  .user-pick-btn .pick-name{font-weight:700;font-size:.85rem}
+  .user-pick-btn .pick-sub{font-size:.68rem;color:var(--txt2)}
+  /* ── Misc ── */
   .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;font-size:.65rem;font-weight:700}
-  .progress-bar{height:6px;border-radius:999px;background:#1e293b;overflow:hidden}
+  .progress-bar{height:6px;border-radius:999px;background:rgba(99,102,241,.1);overflow:hidden}
   .progress-fill{height:100%;border-radius:999px;transition:width .6s ease}
   @keyframes pulse-dot{0%,100%{opacity:1}50%{opacity:.3}}
-  .live-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse-dot 1.5s ease infinite}
+  .live-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse-dot 1.5s ease infinite;flex-shrink:0}
   @keyframes spin{to{transform:rotate(360deg)}}
   .spinning{animation:spin 1s linear infinite}
-  @keyframes flash-update{0%{background:rgba(234,179,8,.22)}100%{background:transparent}}
-  .flash-yellow{animation:flash-update .8s ease-out 3}
-  .stat-card{padding:1rem;display:flex;flex-direction:column;gap:4px}
-  .stat-val{font-size:1.75rem;font-weight:900;line-height:1}
-  .stat-lbl{font-size:.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em}
-  .user-row{display:flex;align-items:center;gap:10px;padding:.65rem .9rem;border-radius:.75rem}
+  @keyframes flash-update{0%,40%{background:rgba(234,179,8,.2)}100%{background:transparent}}
+  .flash-yellow{animation:flash-update 1s ease-out 1 forwards}
+  .stat-card{padding:.9rem;display:flex;flex-direction:column;gap:4px}
+  .stat-val{font-size:1.5rem;font-weight:900;line-height:1}
+  .stat-lbl{font-size:.62rem;color:var(--txt2);text-transform:uppercase;letter-spacing:.05em;margin-top:2px}
+  .user-row{display:flex;align-items:center;gap:10px;padding:.65rem .9rem}
   .user-row:nth-child(even){background:rgba(255,255,255,.03)}
-  .recent-item{padding:.5rem .9rem;display:flex;align-items:center;gap:8px;border-bottom:1px solid rgba(255,255,255,.04)}
+  .recent-item{padding:.5rem .9rem;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--brd)}
   .recent-item:last-child{border-bottom:none}
   .tag-normal{background:rgba(34,197,94,.15);color:#4ade80}
   .tag-blocked{background:rgba(239,68,68,.15);color:#f87171}
@@ -38,28 +55,46 @@
   .link-time{font-size:.6rem;color:#64748b;white-space:nowrap;flex-shrink:0}
   .link-user{font-size:.6rem;color:#6366f1;white-space:nowrap;flex-shrink:0}
   .cat-header{padding:.6rem .9rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03)}
-  .section-title{font-size:.65rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem}
+  .section-title{font-size:.68rem;font-weight:800;color:var(--txt2);text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem}
   ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
-  .filter-btn{background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);color:#94a3b8;border-radius:.5rem;padding:4px 10px;font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s}
+  .filter-btn{background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);color:var(--txt2);border-radius:.5rem;padding:5px 11px;font-size:.7rem;font-weight:700;cursor:pointer;transition:all .15s}
   .filter-btn.active{background:rgba(99,102,241,.3);border-color:rgba(99,102,241,.6);color:#c7d2fe}
+  .light .section-title{color:#475569}
+  .light .filter-btn{color:#475569}
+  .light .link-domain{color:#334155}
 </style>
 </head>
 <body>
-<div id="app" style="max-width:640px;margin:0 auto;padding:.75rem 1rem 4rem">
 
-  <!-- Header -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-top:.5rem">
-    <div>
-      <h1 id="app-name" style="font-size:1.1rem;font-weight:900;margin:0">📡 Pantau Test Link</h1>
-      <p id="header-date" style="font-size:.7rem;color:#64748b;margin:2px 0 0"></p>
+<!-- User Picker Overlay — tampil saat pertama kali buka -->
+<div id="user-picker-overlay">
+  <div class="picker-card">
+    <h2 style="font-size:1.05rem;font-weight:900;margin:0 0 .25rem">📡 Pantau Test Link</h2>
+    <p style="font-size:.75rem;color:var(--txt2);margin:0 0 1.25rem">Pilih peserta yang ingin dipantau:</p>
+    <div id="user-pick-list">
+      <!-- Diisi JS setelah data dimuat -->
+      <div style="text-align:center;padding:2rem;color:var(--txt2);font-size:.8rem">⏳ Memuat daftar peserta...</div>
     </div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <div class="live-dot" id="live-dot" title="Live"></div>
-      <span style="font-size:.65rem;color:#94a3b8" id="last-updated">—</span>
-      <button id="refresh-btn" onclick="fetchData()" title="Refresh"
-        style="background:rgba(99,102,241,.2);border:1px solid rgba(99,102,241,.3);color:#818cf8;border-radius:.5rem;padding:4px 10px;font-size:.75rem;cursor:pointer;font-weight:700">↻</button>
-    </div>
+    <p style="font-size:.62rem;color:var(--txt2);text-align:center;margin:1rem 0 0">Bisa ganti pilihan kapan saja dari header</p>
   </div>
+</div>
+
+<!-- Header sticky -->
+<div class="pantau-header">
+  <div style="flex:1;min-width:0">
+    <h1 id="app-name">📡 Pantau Test Link</h1>
+    <p class="hdate" id="header-date"></p>
+  </div>
+  <div style="display:flex;align-items:center;gap:6px">
+    <div class="live-dot" id="live-dot" title="Live"></div>
+    <span style="font-size:.65rem;color:var(--txt2);white-space:nowrap" id="last-updated">—</span>
+    <button onclick="togglePantauTheme()" title="Ganti tema" class="hdr-btn" id="theme-btn">🌙</button>
+    <button id="change-user-btn" onclick="showUserPicker()" class="hdr-btn" style="display:none">👤 Ganti</button>
+    <button id="refresh-btn" onclick="fetchData()" title="Refresh" class="hdr-btn">↻</button>
+  </div>
+</div>
+
+<div id="app" style="max-width:640px;margin:0 auto;padding:.75rem 1rem 4rem">
 
   <!-- Error / disabled -->
   <div id="err-box" style="display:none" class="card" style="padding:1.5rem;text-align:center"></div>
@@ -149,14 +184,34 @@
 </div>
 
 <script>
-const API_BASE   = '/api';
-let pollInterval = null;
-let _lastData    = null;   // cache data terakhir untuk section link
-let _recentPage  = 1;      // halaman aktif paginasi recent activity
-let _filterSess  = '';     // filter sesi: '' | 'pagi' | 'siang' | 'malam'
-let _filterStat  = '';     // filter status: '' | 'error_404' | 'blocked'
-let _dataLoaded  = false;  // true setelah load pertama (untuk mencegah flash di init)
-const RECENT_PER_PAGE = 10; // jumlah item per halaman
+const API_BASE    = '/api';
+let pollInterval  = null;
+let _lastData     = null;   // cache data terakhir untuk section link
+let _recentPage   = 1;      // halaman aktif paginasi recent activity
+let _filterSess   = '';     // filter sesi: '' | 'pagi' | 'siang' | 'malam'
+let _filterStat   = '';     // filter status: '' | 'error_404' | 'blocked'
+let _dataLoaded   = false;  // true setelah load pertama (untuk mencegah flash di init)
+let _selectedUser = null;   // null = semua user, string = username yang dipilih
+let _pickerShown  = false;  // true jika picker sudah dipilih
+const RECENT_PER_PAGE = 10;
+
+// ── State untuk flash: track hash per item recent activity ─────────────
+let _prevRecentHash = new Set(); // Set of "username|link|at" dari render terakhir
+
+// ── Dark/light mode pantau ─────────────────────────────────────────────
+const _pantauTheme = localStorage.getItem('pantau_theme') || 'dark';
+const _applyPantauTheme = (t) => {
+  document.getElementById('pantau-html').className = t === 'light' ? 'light' : '';
+  document.getElementById('theme-btn').textContent  = t === 'light' ? '☀️' : '🌙';
+  localStorage.setItem('pantau_theme', t);
+};
+_applyPantauTheme(_pantauTheme);
+let _currentTheme = _pantauTheme;
+
+function togglePantauTheme() {
+  _currentTheme = _currentTheme === 'dark' ? 'light' : 'dark';
+  _applyPantauTheme(_currentTheme);
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
@@ -192,13 +247,58 @@ function setFilterStat(stat) {
   renderRecentPage();
 }
 
-// Flash kuning pada card/section yang datanya berubah
+/**
+ * Flash kuning pada ELEMEN INDIVIDU (item recent activity).
+ * Dipanggil hanya untuk item yang baru muncul di render ini.
+ */
 function flashEl(id) {
-  const e = el(id);
+  const e = typeof id === 'string' ? el(id) : id;
   if (!e) return;
   e.classList.remove('flash-yellow');
   void e.offsetWidth; // reflow untuk restart animasi
   e.classList.add('flash-yellow');
+}
+
+/**
+ * Tampilkan user picker overlay (bisa dipanggil dari tombol header).
+ */
+function showUserPicker() {
+  if (!_lastData) return;
+  const overlay = el('user-picker-overlay');
+  if (overlay) overlay.style.display = 'flex';
+  _renderPickerList();
+}
+
+function _renderPickerList() {
+  const list = el('user-pick-list');
+  if (!list || !_lastData) return;
+  const users = _lastData.users || [];
+  list.innerHTML =
+    `<button class="user-pick-btn" onclick="selectUser(null)">
+      <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#22c55e);display:flex;align-items:center;justify-content:center;font-size:1rem;flex-shrink:0">👥</div>
+      <div><div class="pick-name">Semua Peserta</div><div class="pick-sub">${users.length} peserta aktif hari ini</div></div>
+    </button>` +
+    users.map(u => {
+      const init = (u.username||'?').slice(0,2).toUpperCase();
+      const pct  = u.total ? Math.round(u.done/u.total*100) : 0;
+      return `<button class="user-pick-btn" onclick="selectUser('${esc(u.username)}')">
+        <div style="width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#a855f7);display:flex;align-items:center;justify-content:center;font-size:.72rem;font-weight:900;flex-shrink:0">${init}</div>
+        <div style="flex:1;min-width:0"><div class="pick-name">@${esc(u.username)}</div><div class="pick-sub">${esc(u.provider||'—')} · ${pct}% selesai (${u.done}/${u.total})</div></div>
+      </button>`;
+    }).join('');
+}
+
+function selectUser(username) {
+  _selectedUser  = username;
+  _pickerShown   = true;
+  _recentPage    = 1;
+  const overlay  = el('user-picker-overlay');
+  if (overlay) overlay.style.display = 'none';
+  // Update label header
+  const changeBtn = el('change-user-btn');
+  if (changeBtn) { changeBtn.style.display = ''; changeBtn.textContent = username ? `👤 ${username}` : '👥 Semua'; }
+  // Re-render dengan filter baru
+  if (_lastData) renderData(_lastData, false);
 }
 
 // Toggle accordion Progress per Link
@@ -248,7 +348,19 @@ async function fetchData() {
     const wasLoaded = _dataLoaded;
     _lastData   = d;
     _dataLoaded = true;
-    render(d, wasLoaded);
+
+    // Tampilkan user picker hanya pada load pertama (sebelum pickerShown)
+    if (!wasLoaded && !_pickerShown) {
+      _renderPickerList();   // isi list picker dulu
+      // Auto-pilih semua jika hanya 1 user
+      if ((d.users||[]).length <= 1) {
+        selectUser(null);  // langsung lanjut tampilkan data semua user
+      }
+      // Jika >1 user, biarkan overlay muncul menunggu pilihan
+    } else {
+      renderData(d, wasLoaded);
+    }
+
     // Jika accordion link sudah terbuka, re-render juga
     if (el('link-section')?.style.display !== 'none' && d.cat_links) renderCatLinks(d.cat_links);
     el('err-box').style.display = 'none';
@@ -267,11 +379,36 @@ function showError(msg) {
   el('live-dot').style.background = '#ef4444';
 }
 
-function render(d, flash = false) {
+/**
+ * Render semua data ke UI.
+ * @param {object} d    - data dari API
+ * @param {boolean} flash - true jika perlu flash item yang berubah
+ */
+function renderData(d, flash = false) {
   // Tanggal header
-  const [y,m,day] = d.date.split('-');
   el('header-date').textContent = new Date(d.date+'T00:00:00').toLocaleDateString('id-ID',
     {weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  // ── Filter data berdasarkan user terpilih ───────────────────────────
+  const allUsers  = d.users || [];
+  const dispUsers = _selectedUser ? allUsers.filter(u => u.username === _selectedUser) : allUsers;
+  const allRecent = d.recent || [];
+  const dispRecent = _selectedUser ? allRecent.filter(r => r.username === _selectedUser) : allRecent;
+
+  // Hitung summary per user jika ada filter
+  let sm = d.summary || {};
+  if (_selectedUser && dispUsers.length) {
+    const u = dispUsers[0];
+    const doneR = dispRecent.filter(r => ['normal','blocked','error_404'].includes(r.status));
+    sm = {
+      total_links:   u.total  || sm.total_links,
+      done:          u.done   || 0,
+      normal:        doneR.filter(r=>r.status==='normal').length,
+      error:         doneR.filter(r=>r.status==='error_404').length,
+      blocked:       doneR.filter(r=>r.status==='blocked').length,
+      progress_pct:  u.total ? Math.round(u.done/u.total*100) : 0
+    };
+  }
 
   // Sesi
   el('sessions-row').innerHTML = (d.sessions||[]).map(s => `
@@ -282,7 +419,6 @@ function render(d, flash = false) {
     </div>`).join('');
 
   // Summary stats
-  const sm = d.summary||{};
   el('s-total').textContent = sm.total_links ?? '—';
   el('s-done').textContent  = sm.done        ?? '—';
   el('s-pct').textContent   = (sm.progress_pct ?? 0) + '%';
@@ -298,22 +434,22 @@ function render(d, flash = false) {
     return `<div>
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
         <span style="font-size:.75rem;font-weight:600">${m2.icon} ${m2.label}</span>
-        <span style="font-size:.7rem;color:#94a3b8">${t.done}/${t.total} · <strong style="color:${m2.color}">${t.pct}%</strong></span>
+        <span style="font-size:.7rem;color:var(--txt2)">${t.done}/${t.total} · <strong style="color:${m2.color}">${t.pct}%</strong></span>
       </div>
       <div class="progress-bar"><div class="progress-fill" style="width:${t.pct}%;background:${m2.color}"></div></div>
     </div>`;
   }).join('');
 
   // Per user
-  el('user-rows').innerHTML = (d.users||[]).length
-    ? (d.users||[]).map((u,i) => {
+  el('user-rows').innerHTML = dispUsers.length
+    ? dispUsers.map(u => {
         const pct = u.total ? Math.round(u.done/u.total*100) : 0;
         const initials = (u.username||'?').slice(0,2).toUpperCase();
         return `<div class="user-row">
           <div style="width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#6366f1,#a855f7);display:flex;align-items:center;justify-content:center;font-size:.65rem;font-weight:900;flex-shrink:0">${initials}</div>
           <div style="flex:1;min-width:0">
             <div style="font-size:.8rem;font-weight:700">@${esc(u.username)}</div>
-            <div style="font-size:.65rem;color:#94a3b8">${esc(u.provider)} · Aktif ${fmt(u.last_active)}</div>
+            <div style="font-size:.65rem;color:var(--txt2)">${esc(u.provider)} · Aktif ${fmt(u.last_active)}</div>
             <div class="progress-bar" style="margin-top:4px">
               <div class="progress-fill" style="width:${pct}%;background:#6366f1"></div>
             </div>
@@ -326,18 +462,16 @@ function render(d, flash = false) {
       }).join('')
     : '<p style="text-align:center;color:#475569;font-size:.8rem;padding:1.5rem 0;margin:0">Belum ada aktivitas hari ini.</p>';
 
-  // Aktivitas terbaru — simpan ke cache lalu render halaman pertama
-  _recentPage = 1;
-  renderRecentPage();
+  // ── Simpan data recent yang difilter ke _lastData agar renderRecentPage bisa akses ──
+  _lastData._dispRecent = dispRecent;
 
-  // Flash kuning pada section yang berubah (bukan saat load pertama)
-  if (flash) {
-    flashEl('sessions-row');
-    flashEl('by-type-rows');
-    flashEl('user-rows');
-    flashEl('recent-list');
-  }
+  // Aktivitas terbaru — render halaman pertama
+  _recentPage = 1;
+  renderRecentPage(flash); // pass flash agar hanya item baru yang di-flash
 }
+
+// Alias agar pemanggilan lama (render) tetap berfungsi
+function render(d, flash = false) { return renderData(d, flash); }
 
 // ── Render Progress per Kategori & Link ───────────────────────────────
 const TYPE_ORDER = ['otomatis','utama','manual'];
@@ -368,10 +502,10 @@ function renderCatLinks(catLinks) {
 }
 
 // ── Paginasi Recent Activity ──────────────────────────────────────────
-function renderRecentPage() {
-  // Terapkan filter sesi dan status sebelum paginasi
-  const allRecent = _lastData?.recent || [];
-  const recent = allRecent.filter(r => {
+function renderRecentPage(doFlash = false) {
+  // Gunakan data yang sudah difilter per user, lalu terapkan filter sesi & status
+  const baseRecent = _lastData?._dispRecent || _lastData?.recent || [];
+  const recent = baseRecent.filter(r => {
     if (_filterSess && r.session !== _filterSess) return false;
     if (_filterStat && r.status  !== _filterStat) return false;
     return true;
@@ -386,21 +520,31 @@ function renderRecentPage() {
   const infoEl  = el('recent-page-info');
   if (infoEl) infoEl.textContent = total ? `${start + 1}–${Math.min(start + RECENT_PER_PAGE, total)} / ${total}` : '';
 
+  // Hitung hash baru untuk flash comparison
+  const newHashes = new Set(items.map(r => `${r.username}|${r.link_domain}|${r.at}|${r.status}`));
+
   // Render items
-  el('recent-list').innerHTML = items.length
-    ? items.map(r => {
-        const typeM = TYPE_META[r.type] || {icon:'🔗'};
-        return `<div class="recent-item">
-          <div style="width:28px;height:28px;border-radius:.5rem;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0">${typeM.icon}</div>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:.72rem;font-weight:600">@${esc(r.username)} · <span style="color:#94a3b8">${esc(r.category)}</span></div>
-            <div style="font-size:.65rem;font-family:monospace;color:#818cf8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.link_domain||'—')}</div>
-            <div style="font-size:.6rem;color:#64748b">${SESS_LABEL[r.session]||r.session} · ${fmt(r.at)}</div>
-          </div>
-          <div style="flex-shrink:0">${STATUS_TAG[r.status]||r.status}</div>
-        </div>`;
-      }).join('')
-    : '<p style="text-align:center;color:#475569;font-size:.8rem;padding:1.5rem 0;margin:0">Belum ada aktivitas terbaru.</p>';
+  const recentEl = el('recent-list');
+  if (!items.length) {
+    recentEl.innerHTML = '<p style="text-align:center;color:#475569;font-size:.8rem;padding:1.5rem 0;margin:0">Belum ada aktivitas terbaru.</p>';
+  } else {
+    recentEl.innerHTML = items.map(r => {
+      const typeM = TYPE_META[r.type] || {icon:'🔗'};
+      const hash  = `${r.username}|${r.link_domain}|${r.at}|${r.status}`;
+      const isNew = doFlash && !_prevRecentHash.has(hash);
+      return `<div class="recent-item${isNew ? ' flash-yellow' : ''}" data-rhash="${esc(hash)}">
+        <div style="width:28px;height:28px;border-radius:.5rem;background:rgba(255,255,255,.05);display:flex;align-items:center;justify-content:center;font-size:.8rem;flex-shrink:0">${typeM.icon}</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.72rem;font-weight:600">@${esc(r.username)} · <span style="color:var(--txt2)">${esc(r.category)}</span></div>
+          <div style="font-size:.65rem;font-family:monospace;color:#818cf8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(r.link_domain||'—')}</div>
+          <div style="font-size:.6rem;color:#64748b">${SESS_LABEL[r.session]||r.session} · ${fmt(r.at)}</div>
+        </div>
+        <div style="flex-shrink:0">${STATUS_TAG[r.status]||r.status}</div>
+      </div>`;
+    }).join('');
+    // Update hash set untuk render berikutnya
+    _prevRecentHash = newHashes;
+  }
 
   // Tombol paginasi
   const pag = el('recent-pagination');

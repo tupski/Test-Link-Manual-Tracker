@@ -146,12 +146,18 @@
     background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 50%, #162032 100%);
   }
 
-  /* Nav button active state */
-  .nav-btn.active span:first-child {
-    filter: drop-shadow(0 0 6px rgba(99, 102, 241, 0.6));
+  /* Nav button active state — highlight pill di bawah ikon */
+  .nav-btn {
+    position: relative;
   }
-  .nav-btn.active span:last-child {
-    color: #818cf8;
+  .nav-btn.active {
+    background: rgba(99, 102, 241, 0.18);
+  }
+  .nav-btn.active .nav-label {
+    color: #818cf8 !important;
+  }
+  .nav-btn.active span:first-child {
+    filter: drop-shadow(0 0 8px rgba(99, 102, 241, 0.7));
   }
 
   /* Tombol active state (legacy .btn-active) */
