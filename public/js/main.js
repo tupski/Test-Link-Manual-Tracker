@@ -1392,26 +1392,17 @@ const App = (() => {
 
   /** Membuka/menutup Bottom Sheet Laporan */
   const openReportSheet = () => {
-    const sheet = document.getElementById('report-bottom-sheet');
-    if (!sheet) return;
-    sheet.classList.remove('hidden');
-    const content = sheet.querySelector('.glass');
-    if (content) {
-      content.style.transition = 'transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
-      content.style.transform = 'translateY(100%)';
-      void content.offsetHeight;
-      content.style.transform = 'translateY(0)';
-    }
+    const sheet   = document.getElementById('report-sheet');
+    const overlay = document.getElementById('report-sheet-overlay');
+    if (sheet)   sheet.classList.add('open');
+    if (overlay) overlay.classList.add('open');
   };
 
   const closeReportSheet = () => {
-    const sheet = document.getElementById('report-bottom-sheet');
-    if (!sheet) return;
-    const content = sheet.querySelector('.glass');
-    if (content) {
-      content.style.transform = 'translateY(100%)';
-    }
-    setTimeout(() => sheet.classList.add('hidden'), 300);
+    const sheet   = document.getElementById('report-sheet');
+    const overlay = document.getElementById('report-sheet-overlay');
+    if (sheet)   sheet.classList.remove('open');
+    if (overlay) overlay.classList.remove('open');
   };
 
   const kirimLaporanTipe = (type) => {

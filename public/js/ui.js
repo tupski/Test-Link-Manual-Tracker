@@ -142,25 +142,11 @@ const UI = (() => {
 
   /** Toggle akordion kesiapan test link di dashboard */
   const toggleReadiness = () => {
-    const content = document.getElementById('readiness-details');
+    const details = document.getElementById('readiness-details');
     const icon    = document.getElementById('readiness-chevron');
-    if (!content || !icon) return;
-    const isHidden = content.classList.contains('hidden');
-    content.classList.toggle('hidden', !isHidden);
-    
-    // Animasi opacity & slide
-    if (isHidden) {
-      content.style.display = 'block';
-      setTimeout(() => {
-        content.classList.remove('hidden', 'opacity-0');
-        content.classList.add('opacity-100');
-      }, 10);
-    } else {
-      content.classList.add('hidden', 'opacity-0');
-      content.classList.remove('opacity-100');
-    }
-    
-    icon.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+    if (!details || !icon) return;
+    const isOpen = details.classList.toggle('open');
+    icon.style.transform = isOpen ? 'rotate(180deg)' : 'rotate(0deg)';
   };
 
   return { toast, loading, confirm, inputModal, formatDate, formatTime, sessionTimer, todayWIB, togglePwd, toggleReadiness };
