@@ -185,7 +185,7 @@
       </div>
     </div>
   </div>
-  <!-- Tombol Lanjutkan Test Link — muncul hanya saat sesi berlangsung -->
+  <!-- Tombol Lanjutkan Test Link — muncul saat sesi aktif & belum selesai -->
   <div id="lanjutkan-wrap" class="hidden px-5 -mt-1 mb-3">
     <button onclick="App.continueTestLink()"
       class="w-full py-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold text-sm active:scale-95 transition-all flex items-center justify-between px-4">
@@ -196,6 +196,25 @@
       <div class="text-right">
         <p class="text-emerald-200 font-mono text-xs" id="lanjutkan-countdown">--:--:--</p>
       </div>
+    </button>
+  </div>
+  <!-- 3 Tombol Kirim Laporan — muncul saat sesi aktif & semua test selesai -->
+  <div id="laporan-wrap" class="hidden px-5 -mt-1 mb-3 space-y-2">
+    <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider px-1 mb-1">✅ Test Link Selesai — Kirim Laporan</p>
+    <button onclick="App.kirimLaporan('otomatis')"
+      class="w-full py-3 rounded-2xl bg-sky-500/15 border border-sky-500/40 text-sky-300 font-bold text-sm active:scale-95 transition-all flex items-center gap-2.5 px-4">
+      <span class="text-lg">📤</span>
+      <span>Kirim Laporan Test Link Otomatis</span>
+    </button>
+    <button onclick="App.kirimLaporan('utama')"
+      class="w-full py-3 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold text-sm active:scale-95 transition-all flex items-center gap-2.5 px-4">
+      <span class="text-lg">📤</span>
+      <span>Kirim Laporan Test Link Utama Manual</span>
+    </button>
+    <button onclick="App.kirimLaporan('manual')"
+      class="w-full py-3 rounded-2xl bg-indigo-500/15 border border-indigo-500/40 text-indigo-300 font-bold text-sm active:scale-95 transition-all flex items-center gap-2.5 px-4">
+      <span class="text-lg">📤</span>
+      <span>Kirim Laporan Test Link Manual</span>
     </button>
   </div>
   <!-- Kesiapan Test Link -->
@@ -706,29 +725,31 @@
     <div class="w-20 h-20 mx-auto mb-3 rounded-3xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-4xl shadow-2xl shadow-indigo-500/30">🔗</div>
     <h1 class="text-2xl font-black tracking-tight">Test Link Tracker</h1>
     <p class="text-slate-400 text-sm mt-1">Test Link Manual ga bakal kelewat!</p>
-    <span class="mt-2 text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-3 py-1 rounded-xl font-bold">v5.0.0</span>
+    <span class="mt-2 text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-3 py-1 rounded-xl font-bold">v4.4.0</span>
   </div>
   <div class="px-5 space-y-3">
     <div class="glass rounded-2xl p-5 space-y-2">
       <div class="flex justify-between text-sm"><span class="text-slate-400">Pengembang</span><span class="font-semibold">Artupski</span></div>
       <div class="flex justify-between text-sm"><span class="text-slate-400">Organisasi</span><span class="font-semibold">IDR-AH-B组</span></div>
-      <div class="flex justify-between text-sm"><span class="text-slate-400">Versi</span><span class="font-semibold">5.0.0</span></div>
+      <div class="flex justify-between text-sm"><span class="text-slate-400">Versi</span><span class="font-semibold">4.4.0</span></div>
       <div class="flex justify-between text-sm"><span class="text-slate-400">Tahun</span><span class="font-semibold">2026</span></div>
       <div class="flex justify-between text-sm"><span class="text-slate-400">Stack</span><span class="font-semibold text-right">Node.js · Supabase · PWA</span></div>
     </div>
     <div class="glass rounded-2xl p-5">
-      <h3 class="font-bold text-sm mb-3">📝 Changelog v5.0.0</h3>
-      <ul class="text-sm text-slate-300 space-y-1.5 text-xs">
-        <li>✅ 3 baris statistik (Total/Dibuka/Belum, Normal/Error/Diblokir, per tipe)</li>
-        <li>✅ Header kategori tampilkan rentang waktu sesi</li>
-        <li>✅ Tombol laporan floating muncul saat 1 kategori selesai</li>
-        <li>✅ Light/Dark mode switch di bottom nav</li>
-        <li>✅ Kesiapan Test Link: OS, Browser, IP, VPN, Lokasi, ISP</li>
-        <li>✅ REST API publik untuk Android automation</li>
-        <li>✅ Provider opsional untuk admin + ingat pilihan terakhir</li>
-        <li>✅ Screen Panduan & Tentang Aplikasi</li>
-        <li>✅ Fix: Selengkapnya tidak menampilkan HTML sebagai teks</li>
-        <li>✅ Fix: Statistik update otomatis saat kembali ke kategori</li>
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="font-bold text-sm">📝 Changelog terbaru</h3>
+        <button onclick="App.navToChangelog()" class="text-xs text-indigo-400 font-semibold active:scale-95">Lihat semua →</button>
+      </div>
+      <p class="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">v4.4.0 — Terbaru</p>
+      <ul class="text-xs text-slate-300 space-y-1.5">
+        <li>✅ Reset sesi: ganti sessionStorage → localStorage (bug fix)</li>
+        <li>✅ Tombol hapus per notifikasi + hapus semua</li>
+        <li>✅ Flash banner nama situs saat laporkan status link</li>
+        <li>✅ Popup ringkasan setelah selesai 1 kategori (waktu, kecepatan, status)</li>
+        <li>✅ Popup pilihan Cek Ulang / Lanjut Test saat buka kategori selesai</li>
+        <li>✅ 3 tombol Kirim Laporan terpisah (Otomatis/Utama/Manual) saat selesai</li>
+        <li>✅ Paginasi Update Link beranda (5 item per halaman)</li>
+        <li>✅ Format laporan difilter per tipe</li>
       </ul>
     </div>
     <a href="https://signal.me/#eu/FpZSd_PViBDXqQBWjTRhw0PtNF47vL0YIcJb7960UjsTB8u-tLxO_oKmVspN2xvA"
@@ -782,6 +803,132 @@
       <!-- EasyMDE akan diapply pada textarea ini -->
       <textarea id="panduan-editor-content" placeholder="Tulis isi panduan di sini... Markdown didukung.&#10;&#10;Contoh: **tebal**, *miring*, - daftar"></textarea>
     </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════ SCREEN: CHANGELOG LENGKAP -->
+<div id="screen-changelog" class="screen gradient-bg pb-28">
+  <div class="glass px-5 py-4 flex items-center gap-3 sticky top-0 z-10">
+    <button onclick="App.goBack()" class="w-9 h-9 rounded-xl bg-slate-800/80 flex items-center justify-center text-slate-300 active:scale-95">‹</button>
+    <div class="flex-1">
+      <p class="text-[10px] text-slate-400">Riwayat Perubahan</p>
+      <h2 class="text-base font-bold">📝 Changelog Lengkap</h2>
+    </div>
+  </div>
+  <div class="px-5 pt-5 space-y-4 pb-4">
+
+    <!-- v4.4.0 -->
+    <div class="glass rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2 py-0.5 rounded-lg font-bold">v4.4.0</span>
+        <span class="text-xs text-slate-500">April 2026</span>
+      </div>
+      <ul class="text-xs text-slate-300 space-y-1.5">
+        <li>🔧 Fix: reset sesi pakai <code>localStorage</code> agar tidak terhapus saat tab ditutup</li>
+        <li>✨ Tombol hapus per notifikasi + tombol Hapus Semua</li>
+        <li>✨ Flash banner nama situs saat laporkan status link</li>
+        <li>✨ Popup ringkasan setelah selesai 1 kategori (waktu, durasi, kecepatan, status)</li>
+        <li>✨ Popup pilihan Cek Ulang / Lanjut Test saat buka kategori yang sudah selesai</li>
+        <li>✨ 3 tombol Kirim Laporan terpisah per tipe (Otomatis/Utama/Manual) di beranda</li>
+        <li>✨ Format laporan dapat difilter per tipe</li>
+        <li>✨ Paginasi Update Link beranda — 5 item per halaman</li>
+      </ul>
+    </div>
+
+    <!-- v4.3.0 -->
+    <div class="glass rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs bg-slate-500/20 text-slate-400 border border-slate-500/30 px-2 py-0.5 rounded-lg font-bold">v4.3.0</span>
+        <span class="text-xs text-slate-500">Maret 2026</span>
+      </div>
+      <ul class="text-xs text-slate-300 space-y-1.5">
+        <li>🔧 Fix: ISP tidak dikenal → regex 30+ nama PT + alias provider Indonesia</li>
+        <li>🔧 Fix: Field password tersembunyi di login — dipindahkan agar selalu tampil</li>
+        <li>🔧 Fix: ISP "Indonesia Network Information Center" → normalisasi ke nama brand</li>
+        <li>🔧 Fix: Pesan Tipe Koneksi lebih informatif per browser</li>
+        <li>✨ Popup WiFi warning saat login (Refresh / Lanjutkan)</li>
+        <li>✨ Label Tipe Koneksi Data/WiFi di Kesiapan Test Link</li>
+        <li>✨ Riwayat test link per hari + filter sesi + bar chart</li>
+        <li>✨ Reset data + notifikasi otomatis saat sesi mulai (sekali per sesi)</li>
+      </ul>
+    </div>
+
+    <!-- v4.2.0 -->
+    <div class="glass rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs bg-slate-500/20 text-slate-400 border border-slate-500/30 px-2 py-0.5 rounded-lg font-bold">v4.2.0</span>
+        <span class="text-xs text-slate-500">Februari 2026</span>
+      </div>
+      <ul class="text-xs text-slate-300 space-y-1.5">
+        <li>✨ Tombol Lanjutkan Test Link di beranda saat sesi aktif</li>
+        <li>✨ Header kategori tampilkan rentang waktu sesi (Pagi 05:00–10:59 WIB)</li>
+        <li>✨ Popup selesai kategori: tawarkan lanjut ke kategori berikutnya</li>
+        <li>✨ Filter sesi di halaman Pantau publik</li>
+        <li>✨ Auto-scroll ke link pertama yang belum dibuka</li>
+        <li>✨ Card link: warna mencolok saat sudah dilaporkan</li>
+        <li>✨ Halaman Pantau: flash update, format waktu WIB</li>
+      </ul>
+    </div>
+
+    <!-- v4.1.0 -->
+    <div class="glass rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs bg-slate-500/20 text-slate-400 border border-slate-500/30 px-2 py-0.5 rounded-lg font-bold">v4.1.0</span>
+        <span class="text-xs text-slate-500">Januari 2026</span>
+      </div>
+      <ul class="text-xs text-slate-300 space-y-1.5">
+        <li>✨ Halaman publik /pantau — monitoring real-time tanpa login</li>
+        <li>✨ Screen Panduan (admin bisa edit via EasyMDE)</li>
+        <li>✨ Screen Tentang Aplikasi</li>
+        <li>✨ Kesiapan Test Link: OS, Browser, IP, ISP, Lokasi, VPN</li>
+        <li>✨ 3 baris statistik di beranda per tipe</li>
+        <li>✨ Light/Dark mode toggle</li>
+        <li>✨ Optimistic UI — reportStatus < 1 detik</li>
+      </ul>
+    </div>
+
+    <!-- v4.0.0 -->
+    <div class="glass rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs bg-slate-500/20 text-slate-400 border border-slate-500/30 px-2 py-0.5 rounded-lg font-bold">v4.0.0</span>
+        <span class="text-xs text-slate-500">2025</span>
+      </div>
+      <ul class="text-xs text-slate-300 space-y-1.5">
+        <li>✨ Admin whitelist username + password akun user</li>
+        <li>✨ EasyMDE rich text editor untuk panduan</li>
+        <li>✨ PWA: install prompt, back button, service worker</li>
+        <li>✨ Provider opsional untuk admin, ingat pilihan terakhir</li>
+        <li>✨ Notifikasi admin + reset progress per user</li>
+      </ul>
+    </div>
+
+    <!-- v3.0.0 -->
+    <div class="glass rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs bg-slate-500/20 text-slate-400 border border-slate-500/30 px-2 py-0.5 rounded-lg font-bold">v3.0.0</span>
+        <span class="text-xs text-slate-500">2025</span>
+      </div>
+      <ul class="text-xs text-slate-300 space-y-1.5">
+        <li>✨ Backend Supabase PostgreSQL + JWT authentication</li>
+        <li>✨ Tailwind CSS dark glassmorphism UI</li>
+        <li>✨ Admin panel: kategori, sesi, notifikasi, user, provider</li>
+        <li>✨ Generate & kirim laporan via Signal</li>
+        <li>✨ Multi-user dengan tipe provider</li>
+      </ul>
+    </div>
+
+    <!-- v1.0.0 – v2.0.0 -->
+    <div class="glass rounded-2xl p-5">
+      <div class="flex items-center gap-2 mb-3">
+        <span class="text-xs bg-slate-500/20 text-slate-400 border border-slate-500/30 px-2 py-0.5 rounded-lg font-bold">v1–v2</span>
+        <span class="text-xs text-slate-500">Awal 2025</span>
+      </div>
+      <ul class="text-xs text-slate-300 space-y-1.5">
+        <li>🌱 v1.0.0 — Aplikasi HTML/CSS/JS statis</li>
+        <li>🌱 v2.0.0 — Node.js + SQLite backend, multi-device</li>
+      </ul>
+    </div>
+
   </div>
 </div>
 

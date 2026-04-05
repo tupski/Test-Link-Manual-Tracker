@@ -82,13 +82,21 @@ const Screens = (() => {
       _statCard('🔗 Manual',       _typeDone('manual'),     'text-slate-300'),
     ].join('');
 
-    // ── Update link terbaru — tampilkan SEMUA kategori (bukan cuma 5) ─────────
+    // ── Update link terbaru — paginasi 5 item ─────────────────────────────────
     const TYPE_LABEL = { otomatis: 'Otomatis', utama: 'Utama', manual: 'Manual' };
     const sorted = [...cats].filter(c => c.links_updated_at).sort((a, b) =>
       new Date(b.links_updated_at) - new Date(a.links_updated_at));
-    const changeEl = document.getElementById('dash-changes-list');
-    if (sorted.length) {
-      changeEl.innerHTML = sorted.map(c => {
+    const changeEl   = document.getElementById('dash-changes-list');
+    const PAGE_SIZE  = 5;
+    let   _changePage = 0; // halaman saat ini (0-indexed)
+
+    const _renderChangePage = () => {
+      const start  = _changePage * PAGE_SIZE;
+      const end    = start + PAGE_SIZE;
+      const page   = sorted.slice(start, end);
+      const total  = sorted.length;
+
+      const itemsHtml = page.map(c => {
         const typeLabel = TYPE_LABEL[c.type] || c.type;
         return `<div class="flex items-center justify-between py-2 border-b border-slate-700/40 last:border-0 cursor-pointer active:bg-white/5 rounded-lg px-1 -mx-1 transition-colors"
           onclick="App.showCategoryLinkChanges(${c.id}, '${c.name.replace(/'/g, "\\'")}')">
@@ -103,6 +111,29 @@ const Screens = (() => {
           <span class="text-slate-600 ml-1 shrink-0">›</span>
         </div>`;
       }).join('');
+
+      // Navigasi paginasi
+      const totalPages = Math.ceil(total / PAGE_SIZE);
+      const navHtml = totalPages > 1 ? `
+        <div class="flex items-center justify-between pt-2 mt-1 border-t border-slate-700/40">
+          <button id="change-prev" onclick="_dashChangePrev()" ${_changePage === 0 ? 'disabled' : ''}
+            class="text-xs px-2.5 py-1 rounded-lg ${_changePage === 0 ? 'text-slate-700 cursor-not-allowed' : 'text-slate-400 hover:text-white active:scale-95'}">‹ Sebelumnya</button>
+          <span class="text-[10px] text-slate-500">${_changePage + 1} / ${totalPages}</span>
+          <button id="change-next" onclick="_dashChangeNext()" ${end >= total ? 'disabled' : ''}
+            class="text-xs px-2.5 py-1 rounded-lg ${end >= total ? 'text-slate-700 cursor-not-allowed' : 'text-indigo-400 hover:text-indigo-300 active:scale-95'}">Selanjutnya ›</button>
+        </div>` : '';
+
+      changeEl.innerHTML = itemsHtml + navHtml;
+    };
+
+    // Fungsi navigasi paginasi — dipanggil dari inline onclick
+    window._dashChangePrev = () => { if (_changePage > 0) { _changePage--; _renderChangePage(); } };
+    window._dashChangeNext = () => {
+      if ((_changePage + 1) * PAGE_SIZE < sorted.length) { _changePage++; _renderChangePage(); }
+    };
+
+    if (sorted.length) {
+      _renderChangePage();
     } else {
       changeEl.innerHTML = '<p class="text-center text-slate-500 text-xs py-2">Belum ada data update link.</p>';
     }
@@ -178,6 +209,17 @@ const Screens = (() => {
     const anyTypeDone = _typeAllDone('otomatis') || _typeAllDone('utama') || _typeAllDone('manual');
     const laporanBtn = document.getElementById('btn-laporan-testlink');
     if (laporanBtn) laporanBtn.classList.toggle('hidden', !anyTypeDone);
+
+    // Tandai apakah SEMUA tipe yang ada sudah selesai → tampilkan 3 tombol laporan di beranda
+    // Tipe tanpa kategori dianggap selesai (tidak perlu dikerjakan)
+    const _typeExistsAndDone = (type) => {
+      const tc = cats.filter(c => c.type === type);
+      if (!tc.length) return true; // tidak ada kategori tipe ini → anggap selesai
+      return _typeAllDone(type);
+    };
+    const allTestDone = _typeExistsAndDone('otomatis') && _typeExistsAndDone('utama') && _typeExistsAndDone('manual');
+    const laporanWrap = document.getElementById('laporan-wrap');
+    if (laporanWrap) laporanWrap.dataset.allDone = allTestDone ? 'true' : 'false';
 
     container.innerHTML = sessions.map(s => {
       const timer      = UI.sessionTimer(s.start_hour, s.start_minute, s.normal_hours, s.max_hours);
@@ -433,7 +475,13 @@ const Screens = (() => {
    * @param {string} provider    - nama provider user
    * @returns {Promise<string>}  - teks laporan siap kirim
    */
-  const generateReport = async (sessionName, provider) => {
+  /**
+   * @param {string} sessionName - nama sesi (pagi/siang/malam)
+   * @param {string} provider    - nama provider user
+   * @param {string} [type]      - filter tipe: 'otomatis'|'utama'|'manual'. Jika kosong, semua tipe.
+   * @returns {Promise<string>}  - teks laporan siap kirim
+   */
+  const generateReport = async (sessionName, provider, type = null) => {
     const today    = UI.todayWIB();
     const cats     = await API.getCategories();
     const progress = await API.getProgress(today, sessionName);
@@ -454,11 +502,13 @@ const Screens = (() => {
     const domainOf = (url) => url.replace(/^https?:\/\//, '').split('/')[0];
 
     let report = '';
-    const sections = [
+    let sections = [
       { type: 'otomatis', title: 'Test Link Otomatis' },
       { type: 'utama',    title: 'Test Link Utama Manual' },
       { type: 'manual',   title: 'Test Link Manual' }
     ];
+    // Filter hanya tipe yang diminta jika parameter type diberikan
+    if (type) sections = sections.filter(s => s.type === type);
 
     sections.forEach(sec => {
       const typeCats = cats.filter(c => c.type === sec.type);

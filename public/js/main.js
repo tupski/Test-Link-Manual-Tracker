@@ -217,13 +217,14 @@ const App = (() => {
       // ── Sesi aktif: tampilkan info sesi + sisa waktu ───────────
       _activeSession = activeSess.session_name;
 
-      // Trigger reset data sekali per sesi (simpan flag di sessionStorage)
+      // Trigger reset data sekali per sesi per hari — simpan di localStorage (bertahan lintas tab/refresh)
+      // Key berbasis tanggal+sesi → otomatis tidak berlaku untuk hari/sesi berbeda
       const resetKey = `lt_sess_reset_${UI.todayWIB()}_${activeSess.session_name}`;
-      if (!sessionStorage.getItem(resetKey) && state.user) {
-        sessionStorage.setItem(resetKey, '1'); // tandai sudah dikirim (optimistic)
+      if (!localStorage.getItem(resetKey) && state.user) {
+        localStorage.setItem(resetKey, '1'); // tandai sudah dikirim (optimistic)
         API.onSessionStart({ session_name: activeSess.session_name, date: UI.todayWIB() })
           .then(r => { if (r?.deleted > 0) { _updateNotifBadge().catch(() => {}); } })
-          .catch(() => { sessionStorage.removeItem(resetKey); }); // rollback jika gagal
+          .catch(() => { localStorage.removeItem(resetKey); }); // rollback jika gagal
       }
       const sessLabel = SESS_DISPLAY_CD[activeSess.session_name] || activeSess.session_name;
       const timer     = UI.sessionTimer(activeSess.start_hour, activeSess.start_minute, activeSess.normal_hours, activeSess.max_hours);
@@ -242,14 +243,23 @@ const App = (() => {
       const rs = remSecs % 60;
       if (cd) cd.textContent = `${String(rh).padStart(2,'0')}:${String(rm).padStart(2,'0')}:${String(rs).padStart(2,'0')}`;
 
-      // Tampilkan tombol Lanjutkan, update countdown sisa sesi di dalamnya
-      if (lanjutkanWrap) lanjutkanWrap.classList.remove('hidden');
-      const cdEl = document.getElementById('lanjutkan-countdown');
-      if (cdEl) cdEl.textContent = `Sisa ${String(rh).padStart(2,'0')}:${String(rm).padStart(2,'0')}:${String(rs).padStart(2,'0')}`;
+      // Cek apakah semua test sudah selesai → tampilkan 3 tombol laporan
+      const laporanWrap = document.getElementById('laporan-wrap');
+      const allTestDone = laporanWrap?.dataset.allDone === 'true';
+      if (allTestDone) {
+        lanjutkanWrap?.classList.add('hidden');
+        laporanWrap?.classList.remove('hidden');
+      } else {
+        lanjutkanWrap?.classList.remove('hidden');
+        laporanWrap?.classList.add('hidden');
+        const cdEl = document.getElementById('lanjutkan-countdown');
+        if (cdEl) cdEl.textContent = `Sisa ${String(rh).padStart(2,'0')}:${String(rm).padStart(2,'0')}:${String(rs).padStart(2,'0')}`;
+      }
     } else {
       // ── Tidak ada sesi aktif: countdown ke sesi berikutnya ────
       _activeSession = null;
       if (lanjutkanWrap) lanjutkanWrap.classList.add('hidden');
+      document.getElementById('laporan-wrap')?.classList.add('hidden');
 
       const { session, diffSecs, tomorrow } = _getNextSession(sessions);
       const h  = Math.floor(diffSecs / 3600);
@@ -925,17 +935,24 @@ const App = (() => {
           new Set(['normal','blocked','error_404']).has(p.status)
         ).length;
         if (total > 0 && done >= total) {
-          // Cari kategori berikutnya dalam tipe yang sama
+          // Cari kategori berikutnya yang BELUM selesai dalam tipe yang sama
           const typeCats = cats.filter(c => c.type === cat.type);
           const idx      = typeCats.findIndex(c => c.id === cat.id || c.id === Number(catId));
-          const nextCat  = idx >= 0 ? typeCats[idx + 1] : null;
-          const msg = nextCat
-            ? `Test link pada kategori <strong>${catName}</strong> sudah selesai. Apakah anda ingin melanjutkan ke kategori <strong>${nextCat.name}</strong>?`
-            : `Test link pada kategori <strong>${catName}</strong> sudah selesai.`;
-          const ok = await UI.confirm('✅ Kategori Selesai', msg,
-            nextCat ? 'Lanjut' : 'Tutup', 'bg-emerald-600', true);
-          if (nextCat && ok) { catId = nextCat.id; catName = nextCat.name; }
-          else return; // User pilih Tidak atau tidak ada nextCat
+          const nextCat  = typeCats.slice(idx + 1).find(c => {
+            const d = progress.filter(p => p.category_id === c.id && new Set(['normal','blocked','error_404']).has(p.status)).length;
+            return d < Number(c.link_count);
+          });
+
+          // Popup dengan dua pilihan: Cek Ulang (buka saja) atau Lanjut Test
+          const result = await _showCategoryDoneChoice(catName, nextCat);
+          if (result === 'recheck') {
+            // Lanjutkan ke bawah — buka kategori yang sama
+          } else if (result === 'next' && nextCat) {
+            catId   = nextCat.id;
+            catName = nextCat.name;
+          } else {
+            return; // Tutup
+          }
         }
       }
     } catch { /* abaikan, tetap buka kategori */ }
@@ -1053,9 +1070,11 @@ const App = (() => {
         prog = await API.markOpened({ link_id: linkId, category_id: catId, session_name: sessionName, date: today });
         progId = prog.id;
       }
-      state.pendingLinkId = linkId;
-      state.pendingProgId = progId;
-      state.pendingCatId  = catId;
+      state.pendingLinkId  = linkId;
+      state.pendingProgId  = progId;
+      state.pendingCatId   = catId;
+      state.pendingDomain  = url.replace(/^https?:\/\//, '').split('/')[0]; // domain untuk flash
+      if (!state.catStartTime) state.catStartTime = Date.now(); // catat waktu mulai kategori
       window.open(url, '_blank');
       // Tampilkan modal status setelah jeda singkat
       setTimeout(() => document.getElementById('modal-status').style.display = 'flex', 600);
@@ -1089,22 +1108,210 @@ const App = (() => {
         if (timeEl) timeEl.textContent = `🕐 ${nowStr}`;
       }
     }
-    UI.toast(`${sm?.icon || ''} ${sm?.label || status}`, 'success', 1500);
+    // ── Flash banner nama situs + status ──────────────────────
+    const domain = state.pendingDomain || '';
+    _showStatusFlash(domain, sm?.icon || '', sm?.label || status, sm?.cls || '');
 
-    // Simpan progId lalu reset state (agar tidak terduplikasi)
-    const progId  = state.pendingProgId;
-    state.pendingProgId = null;
+    // Simpan data lalu reset state
+    const progId    = state.pendingProgId;
+    const catId     = state.pendingCatId;
+    const catName   = state.currentCatName;
+    const sessName  = state.currentSession;
+    const startTime = state.catStartTime;
+    state.pendingProgId  = null;
+    state.pendingDomain  = null;
 
-    // ── API call + re-render di background (tidak blok UI) ──
+    // ── API call + re-render + cek selesai kategori ──────────
     API.updateStatus(progId, status)
-      .then(() => {
-        Screens.renderLinks(state.currentCatId, state.currentCatName, state.currentSession).catch(() => {});
+      .then(async () => {
+        await Screens.renderLinks(catId, catName, sessName).catch(() => {});
         Screens.renderDashboard().catch(() => {});
+        // Cek apakah kategori ini sudah selesai setelah update
+        await _checkCategoryDone(catId, catName, sessName, startTime);
       })
       .catch(e => {
         UI.toast('Gagal update: ' + e.message, 'error');
-        Screens.renderLinks(state.currentCatId, state.currentCatName, state.currentSession).catch(() => {});
+        Screens.renderLinks(catId, catName, sessName).catch(() => {});
       });
+  };
+
+  /**
+   * Tampilkan flash banner nama situs + status di atas layar.
+   * Menggantikan toast sederhana agar lebih informatif.
+   */
+  const _showStatusFlash = (domain, icon, label, cls) => {
+    const FLASH_ID = 'status-flash-banner';
+    let el = document.getElementById(FLASH_ID);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = FLASH_ID;
+      el.style.cssText = [
+        'position:fixed;top:4rem;left:50%;transform:translateX(-50%) translateY(-120%)',
+        'z-index:300;max-width:22rem;width:90%',
+        'background:rgba(15,23,42,.92);border-radius:.875rem;padding:.6rem 1rem',
+        'display:flex;align-items:center;gap:.5rem',
+        'border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(10px)',
+        'transition:transform .25s cubic-bezier(.34,1.56,.64,1),opacity .2s',
+        'opacity:0;box-shadow:0 4px 24px rgba(0,0,0,.5)'
+      ].join(';');
+      document.body.appendChild(el);
+    }
+    el.innerHTML = `<span style="font-size:1.1rem;line-height:1">${icon}</span>
+      <div style="flex:1;min-width:0">
+        <p style="font-size:.72rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:#e2e8f0">${domain}</p>
+        <p style="font-size:.65rem;color:#94a3b8">${label}</p>
+      </div>`;
+    // Tampilkan
+    requestAnimationFrame(() => {
+      el.style.transform = 'translateX(-50%) translateY(0)';
+      el.style.opacity   = '1';
+    });
+    clearTimeout(el._hideTimer);
+    el._hideTimer = setTimeout(() => {
+      el.style.transform = 'translateX(-50%) translateY(-120%)';
+      el.style.opacity   = '0';
+    }, 2200);
+  };
+
+  /**
+   * Cek apakah semua link di kategori sudah selesai setelah update status.
+   * Jika ya, tampilkan popup ringkasan penyelesaian kategori.
+   */
+  const _checkCategoryDone = async (catId, catName, sessName, startTime) => {
+    try {
+      const today    = UI.todayWIB();
+      const [cats, progress] = await Promise.all([
+        API.getCategories(),
+        API.getProgress(today, sessName)
+      ]);
+      const cat  = cats.find(c => c.id === Number(catId) || c.id === catId);
+      if (!cat) return;
+      const total   = Number(cat.link_count);
+      const finalSt = new Set(['normal', 'blocked', 'error_404']);
+      const catProg = progress.filter(p => (p.category_id === cat.id) && finalSt.has(p.status));
+      if (catProg.length < total) return; // belum selesai
+
+      // ── Semua link selesai — hitung statistik ────────────────
+      state.catStartTime = null; // reset untuk kategori berikutnya
+      const endTime   = Date.now();
+      const durMs     = startTime ? endTime - startTime : 0;
+      const durMin    = Math.floor(durMs / 60000);
+      const durSec    = Math.floor((durMs % 60000) / 1000);
+      const durStr    = durMin > 0 ? `${durMin} menit ${durSec} detik` : `${durSec} detik`;
+      const speed     = durMin > 0 ? (total / durMin).toFixed(1) : total;
+
+      const normalCnt  = catProg.filter(p => p.status === 'normal').length;
+      const errorCnt   = catProg.filter(p => p.status === 'error_404').length;
+      const blockedCnt = catProg.filter(p => p.status === 'blocked').length;
+
+      const startStr  = startTime ? new Date(startTime).toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' }) : '—';
+      const endStr    = new Date(endTime).toLocaleTimeString('id-ID', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+
+      // Cari kategori berikutnya dalam tipe yang sama
+      const typeCats = cats.filter(c => c.type === cat.type);
+      const idx      = typeCats.findIndex(c => c.id === cat.id || c.id === Number(catId));
+      const nextCat  = typeCats.slice(idx + 1).find(c => {
+        const done = progress.filter(p => p.category_id === c.id && finalSt.has(p.status)).length;
+        return done < Number(c.link_count);
+      });
+
+      // ── Tampilkan popup ringkasan ────────────────────────────
+      await _showCategoryDoneModal({ catName, total, normalCnt, errorCnt, blockedCnt,
+        startStr, endStr, durStr, speed, nextCat });
+    } catch { /* abaikan */ }
+  };
+
+  /**
+   * Popup ringkasan penyelesaian kategori dengan tombol Tutup | Lanjut Test.
+   */
+  const _showCategoryDoneModal = ({ catName, total, normalCnt, errorCnt, blockedCnt,
+    startStr, endStr, durStr, speed, nextCat }) => {
+    return new Promise(resolve => {
+      const MODAL_ID = 'modal-cat-done';
+      let modal = document.getElementById(MODAL_ID);
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = MODAL_ID;
+        modal.style.cssText = 'position:fixed;inset:0;z-index:200;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.65);padding:1rem';
+        document.body.appendChild(modal);
+      }
+      modal.innerHTML = `
+        <div class="glass rounded-3xl w-full slide-up" style="max-width:26rem;padding:1.5rem 1.25rem;padding-bottom:calc(1.5rem + env(safe-area-inset-bottom))">
+          <div class="flex items-center gap-2 mb-4">
+            <span class="text-2xl">✅</span>
+            <div>
+              <p class="font-black text-base">Kategori Selesai!</p>
+              <p class="text-xs text-slate-400 truncate">${catName}</p>
+            </div>
+          </div>
+          <div class="space-y-1.5 text-sm mb-4">
+            <div class="flex justify-between"><span class="text-slate-400">⏱ Waktu</span><span class="font-semibold">${startStr} – ${endStr}</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">⌛ Durasi</span><span class="font-semibold">${durStr}</span></div>
+            <div class="flex justify-between"><span class="text-slate-400">⚡ Kecepatan</span><span class="font-semibold">${speed} link/menit</span></div>
+            <div class="h-px bg-slate-700/50 my-1"></div>
+            <div class="flex justify-between"><span class="text-slate-400">✅ Normal</span><span class="font-semibold text-emerald-400">${normalCnt} link</span></div>
+            ${errorCnt   ? `<div class="flex justify-between"><span class="text-slate-400">❌ Error</span><span class="font-semibold text-amber-400">${errorCnt} link</span></div>` : ''}
+            ${blockedCnt ? `<div class="flex justify-between"><span class="text-slate-400">🚫 Diblokir</span><span class="font-semibold text-rose-400">${blockedCnt} link</span></div>` : ''}
+            <div class="flex justify-between"><span class="text-slate-400">📊 Total</span><span class="font-semibold">${total} link selesai</span></div>
+          </div>
+          <div class="flex gap-2.5">
+            <button id="cat-done-tutup" class="flex-1 py-3 rounded-xl bg-slate-700/60 text-slate-300 font-semibold text-sm active:scale-95">Tutup</button>
+            ${nextCat ? `<button id="cat-done-lanjut" class="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm active:scale-95">Lanjut Test<br><span class="text-[10px] font-normal opacity-80">${nextCat.name}</span></button>` : ''}
+          </div>
+        </div>`;
+      modal.style.display = 'flex';
+      document.getElementById('cat-done-tutup').onclick = () => { modal.style.display = 'none'; resolve(false); };
+      const lanjutBtn = document.getElementById('cat-done-lanjut');
+      if (lanjutBtn) {
+        lanjutBtn.onclick = () => {
+          modal.style.display = 'none';
+          resolve(true);
+          openCategory(nextCat.id, nextCat.name);
+        };
+      }
+    });
+  };
+
+  /**
+   * Popup konfirmasi saat user membuka kategori yang sudah selesai.
+   * Pilihan: 'recheck' (buka kategori yg sama) | 'next' (lanjut kategori berikutnya) | null (tutup)
+   */
+  const _showCategoryDoneChoice = (catName, nextCat) => {
+    return new Promise(resolve => {
+      const MODAL_ID = 'modal-cat-choice';
+      let modal = document.getElementById(MODAL_ID);
+      if (!modal) {
+        modal = document.createElement('div');
+        modal.id = MODAL_ID;
+        modal.style.cssText = 'position:fixed;inset:0;z-index:200;display:flex;align-items:flex-end;justify-content:center;background:rgba(0,0,0,.65);padding:1rem';
+        document.body.appendChild(modal);
+      }
+      modal.innerHTML = `
+        <div class="glass rounded-3xl w-full slide-up" style="max-width:26rem;padding:1.5rem 1.25rem;padding-bottom:calc(1.5rem + env(safe-area-inset-bottom))">
+          <div class="flex items-center gap-2 mb-3">
+            <span class="text-2xl">✅</span>
+            <div>
+              <p class="font-black text-base">Kategori Sudah Selesai</p>
+              <p class="text-xs text-slate-400 truncate">${catName}</p>
+            </div>
+          </div>
+          <p class="text-sm text-slate-400 mb-4">Semua link di kategori ini sudah dikerjakan. Pilih tindakan:</p>
+          <div class="flex flex-col gap-2.5">
+            <button id="cat-choice-recheck" class="w-full py-3 rounded-xl bg-slate-700/60 text-slate-200 font-semibold text-sm active:scale-95">
+              🔄 Cek Ulang <span class="text-slate-400 font-normal">${catName}</span>
+            </button>
+            ${nextCat ? `<button id="cat-choice-next" class="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm active:scale-95">
+              Lanjut Test<br><span class="text-[10px] font-normal opacity-80">${nextCat.name}</span>
+            </button>` : ''}
+            <button id="cat-choice-close" class="w-full py-2 rounded-xl text-slate-500 text-xs active:scale-95">Tutup</button>
+          </div>
+        </div>`;
+      modal.style.display = 'flex';
+      document.getElementById('cat-choice-recheck').onclick = () => { modal.style.display = 'none'; resolve('recheck'); };
+      document.getElementById('cat-choice-close').onclick   = () => { modal.style.display = 'none'; resolve(null); };
+      const nextBtn = document.getElementById('cat-choice-next');
+      if (nextBtn) nextBtn.onclick = () => { modal.style.display = 'none'; resolve('next'); };
+    });
   };
 
   const closeStatusModal = (e) => {
@@ -1272,6 +1479,11 @@ const App = (() => {
     showScreen('screen-tentang');
   };
 
+  /** Navigasi ke screen Changelog Lengkap */
+  const navToChangelog = () => {
+    showScreen('screen-changelog');
+  };
+
   // ── Notifikasi ────────────────────────────────────────────
   let _seenNotifIds = new Set(JSON.parse(localStorage.getItem('lt_seen_notifs') || '[]'));
 
@@ -1299,6 +1511,32 @@ const App = (() => {
     setActiveNav('notif');
   };
 
+  /** Hapus satu notifikasi (dari sisi user — nonaktifkan via API) */
+  const dismissNotif = async (id) => {
+    try {
+      await API.updateNotification(id, { is_active: false });
+      await renderNotifScreen();
+      _updateNotifBadge().catch(() => {});
+    } catch (e) { UI.toast(e.message, 'error'); }
+  };
+
+  /** Hapus semua notifikasi aktif */
+  const dismissAllNotifs = async () => {
+    const ok = await UI.confirm('🗑️ Hapus Semua Notifikasi?',
+      'Semua notifikasi akan dihapus dari daftar.', 'Hapus Semua', 'bg-rose-600');
+    if (!ok) return;
+    UI.loading(true);
+    try {
+      const notifs = await API.getNotifications();
+      await Promise.all(notifs.filter(n => n.is_active)
+        .map(n => API.updateNotification(n.id, { is_active: false })));
+      await renderNotifScreen();
+      _updateNotifBadge().catch(() => {});
+      UI.toast('Semua notifikasi dihapus.', 'success');
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
   /** Render daftar notifikasi di screen-notif */
   const renderNotifScreen = async () => {
     const container = document.getElementById('notif-list-screen');
@@ -1307,20 +1545,32 @@ const App = (() => {
       const notifs = await API.getNotifications();
       const active = notifs.filter(n => n.is_active);
       if (!active.length) {
-        container.innerHTML = '<p class="text-center text-slate-500 text-sm py-10">🔕 Belum ada notifikasi aktif.</p>';
+        container.innerHTML = '<p class="text-center text-slate-500 text-sm py-10">🔕 Belum ada notifikasi.</p>';
         return;
       }
-      container.innerHTML = active.map(n => {
-        const isUnread = !_seenNotifIds.has(n.id);
-        const date     = new Date(n.created_at).toLocaleDateString('id-ID',
-          { weekday:'short', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
-        return `<div class="glass rounded-xl p-4 ${isUnread ? 'border border-indigo-500/30' : ''}">
-          ${isUnread ? '<span class="text-[9px] font-bold bg-indigo-500 text-white px-1.5 py-0.5 rounded-md mb-1 inline-block">BARU</span>' : ''}
-          <p class="text-sm font-semibold leading-snug">${_escHtml(n.title || '')}</p>
-          ${n.message ? `<p class="text-xs text-slate-400 mt-0.5">${_escHtml(n.message)}</p>` : ''}
-          <p class="text-[10px] text-slate-500 mt-1">${date}</p>
-        </div>`;
-      }).join('');
+      // Tombol hapus semua di atas list
+      container.innerHTML = `
+        <div class="flex justify-end mb-3">
+          <button onclick="App.dismissAllNotifs()" class="text-xs text-rose-400 font-semibold border border-rose-500/30 px-3 py-1.5 rounded-lg active:scale-95 transition-all flex items-center gap-1.5">
+            🗑️ Hapus Semua
+          </button>
+        </div>
+        ${active.map(n => {
+          const isNew = !_seenNotifIds.has(n.id);
+          return `<div class="glass rounded-2xl p-4 mb-3 ${isNew ? 'border border-indigo-500/30' : ''}">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex-1 min-w-0">
+                ${isNew ? '<span class="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded px-1.5 py-0.5 font-bold mr-1">BARU</span>' : ''}
+                <span class="font-semibold text-sm">${n.title}</span>
+                ${n.message ? `<p class="text-slate-400 text-xs mt-1">${n.message}</p>` : ''}
+                <p class="text-[10px] text-slate-600 mt-1.5">${new Date(n.created_at).toLocaleString('id-ID')}</p>
+              </div>
+              <button onclick="App.dismissNotif(${n.id})" title="Hapus notifikasi ini"
+                class="shrink-0 text-slate-600 hover:text-rose-400 active:scale-90 transition-all text-lg leading-none px-1">🗑️</button>
+            </div>
+          </div>`;
+        }).join('')}`;
+      return;
     } catch (e) {
       container.innerHTML = '<p class="text-center text-rose-400 text-sm py-6">Gagal memuat notifikasi.</p>';
     }
@@ -1757,12 +2007,16 @@ const App = (() => {
   history.pushState(null, '', location.href);
 
   // ── Report Actions ─────────────────────────────────────────
-  /** Tampilkan modal laporan — dipanggil dari tombol Kirim Laporan */
-  const kirimLaporan = async () => {
+  /**
+   * Tampilkan modal laporan — dipanggil dari tombol Kirim Laporan.
+   * @param {string} [type] - filter tipe: 'otomatis'|'utama'|'manual'. Jika kosong, semua tipe.
+   */
+  const kirimLaporan = async (type = null) => {
     UI.loading(true);
     try {
       const provider = state.user?.provider || '';
-      const text     = await Screens.generateReport(state.currentSession, provider);
+      const sessName = state.currentSession || _activeSession;
+      const text     = await Screens.generateReport(sessName, provider, type || null);
       document.getElementById('report-text').value = text;
       document.getElementById('modal-report').style.display = 'flex';
     } catch (e) { UI.toast(e.message, 'error'); }
@@ -1925,7 +2179,7 @@ const App = (() => {
       });
       Screens.setHistSess(sess);
     },
-    navToPanduan, navToTentang, navToNotif, markAllNotifRead,
+    navToPanduan, navToTentang, navToChangelog, navToNotif, markAllNotifRead, dismissNotif, dismissAllNotifs,
     closeProfileDrawer, openSettings, deleteAccount, showLinkChanges, showCategoryLinkChanges,
     saveUsername, saveProvider, resetAllProgress,
     requestNotification,
