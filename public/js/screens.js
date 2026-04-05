@@ -82,18 +82,27 @@ const Screens = (() => {
       _statCard('🔗 Manual',       _typeDone('manual'),     'text-slate-300'),
     ].join('');
 
-    // ── Update link terbaru ───────────────────────────────────────────
+    // ── Update link terbaru — tampilkan SEMUA kategori (bukan cuma 5) ─────────
+    const TYPE_LABEL = { otomatis: 'Otomatis', utama: 'Utama', manual: 'Manual' };
     const sorted = [...cats].filter(c => c.links_updated_at).sort((a, b) =>
       new Date(b.links_updated_at) - new Date(a.links_updated_at));
     const changeEl = document.getElementById('dash-changes-list');
     if (sorted.length) {
-      changeEl.innerHTML = sorted.slice(0, 5).map(c =>
-        `<div class="flex items-center justify-between py-2 border-b border-slate-800/60 last:border-0">
-          <span class="text-sm font-semibold truncate flex-1">${c.name}</span>
-          <span class="text-xs text-slate-500 shrink-0 ml-2">${UI.formatDate(c.links_updated_at)}</span>
-          <span class="text-xs text-indigo-400 font-mono ml-2 shrink-0">${c.link_count} link</span>
-        </div>`
-      ).join('');
+      changeEl.innerHTML = sorted.map(c => {
+        const typeLabel = TYPE_LABEL[c.type] || c.type;
+        return `<div class="flex items-center justify-between py-2 border-b border-slate-700/40 last:border-0 cursor-pointer active:bg-white/5 rounded-lg px-1 -mx-1 transition-colors"
+          onclick="App.showCategoryLinkChanges(${c.id}, '${c.name.replace(/'/g, "\\'")}')">
+          <div class="flex-1 min-w-0">
+            <p class="text-sm font-semibold truncate">${c.name}</p>
+            <p class="text-[10px] text-slate-500">${typeLabel} · ${c.group_name || 'Situs'}</p>
+          </div>
+          <div class="text-right shrink-0 ml-2">
+            <p class="text-xs text-indigo-400 font-mono">${c.link_count} link</p>
+            <p class="text-[10px] text-slate-500">${UI.formatDate(c.links_updated_at)}</p>
+          </div>
+          <span class="text-slate-600 ml-1 shrink-0">›</span>
+        </div>`;
+      }).join('');
     } else {
       changeEl.innerHTML = '<p class="text-center text-slate-500 text-xs py-2">Belum ada data update link.</p>';
     }
@@ -229,9 +238,15 @@ const Screens = (() => {
     const endM    = endTotal % 60;
     const timeRange = `${UI.formatTime(startH, startM)} – ${UI.formatTime(endH, endM)} WIB`;
 
+    // Hitung nomor sesi berdasarkan urutan jam mulai (Pagi=#1, Sore=#2, Malam=#3)
+    const sortedSessions = [...sessions].sort((a, b) =>
+      (a.start_hour * 60 + (a.start_minute || 0)) - (b.start_hour * 60 + (b.start_minute || 0)));
+    const sessIdx = sortedSessions.findIndex(s => s.session_name === sessionName);
+    const sessNum = sessIdx >= 0 ? sessIdx + 1 : 1;
+
     // Update header sesi
     document.getElementById('cat-session-label').textContent = `${sessEmoji} ${sessLabel} · ${timeRange}`;
-    document.getElementById('cat-session-title').textContent = `Test Link`;
+    document.getElementById('cat-session-title').textContent = `Test Link #${sessNum}`;
 
     const timer   = UI.sessionTimer(sess.start_hour, sess.start_minute, sess.normal_hours, sess.max_hours);
     const timerEl = document.getElementById('cat-timer');
@@ -266,6 +281,18 @@ const Screens = (() => {
       </div>`;
     };
 
+    // Helper: cek apakah semua link di tipe ini sudah berstatus final
+    const finalStatuses = new Set(['normal', 'blocked', 'error_404']);
+    const isTypeDone = (type) => {
+      const tc  = cats.filter(c => c.type === type);
+      const tot = tc.reduce((a, c) => a + Number(c.link_count), 0);
+      if (!tot) return false;
+      const done = progress.filter(p =>
+        tc.some(c => c.id === p.category_id) && finalStatuses.has(p.status)
+      ).length;
+      return done >= tot;
+    };
+
     // Render per tipe → per group_name
     const container = document.getElementById('category-list');
     let html = '';
@@ -284,9 +311,26 @@ const Screens = (() => {
             <div class="space-y-2">${grpCats.map(catCard).join('')}</div>
           </div>`;
       });
+      // Tombol Kirim Laporan: setelah utama (mencakup otomatis+utama), dan setelah manual
+      let laporanBtn = '';
+      if (type === 'utama') {
+        const autoUtamaDone = isTypeDone('otomatis') || isTypeDone('utama');
+        if (autoUtamaDone) {
+          laporanBtn = `<button onclick="App.kirimLaporan()" class="w-full mt-2 py-2.5 rounded-xl bg-emerald-500/15 border border-emerald-500/35 text-emerald-300 font-bold text-xs active:scale-95 transition-all flex items-center justify-center gap-1.5">
+            📤 Kirim Laporan Otomatis &amp; Utama
+          </button>`;
+        }
+      } else if (type === 'manual') {
+        if (isTypeDone('manual')) {
+          laporanBtn = `<button onclick="App.kirimLaporan()" class="w-full mt-2 py-2.5 rounded-xl bg-indigo-500/15 border border-indigo-500/35 text-indigo-300 font-bold text-xs active:scale-95 transition-all flex items-center justify-center gap-1.5">
+            📤 Kirim Laporan Manual
+          </button>`;
+        }
+      }
       html += `<div class="pt-3 pb-1">
         <p class="text-xs font-bold ${meta.color} uppercase tracking-wider mb-2 px-1">${meta.label}</p>
         ${groupsHtml}
+        ${laporanBtn}
       </div>`;
     });
     container.innerHTML = html || '<p class="text-center text-slate-500 text-sm py-10">Belum ada kategori.</p>';
@@ -337,12 +381,13 @@ const Screens = (() => {
     document.getElementById('links-progress-text').textContent = `${done}/${total}`;
     document.getElementById('links-progress-bar').style.width  = pct + '%';
 
-    const statusIcon = { normal:'✅', blocked:'🚫', error_404:'❌', opened:'🔵' };
-    const statusBg   = {
-      normal:    'border-emerald-500/20 bg-emerald-500/5',
-      blocked:   'border-rose-500/20 bg-rose-500/5',
-      error_404: 'border-amber-500/20 bg-amber-500/5',
-      opened:    'border-indigo-500/20 bg-indigo-500/5'
+    const statusIcon  = { normal:'✅', blocked:'🚫', error_404:'❌', opened:'🔵' };
+    // Warna jauh lebih kontras: border tebal + background kuat agar beda jelas
+    const statusBg = {
+      normal:    'border-l-4 border-l-emerald-500 border-emerald-500/30 bg-emerald-500/15',
+      blocked:   'border-l-4 border-l-rose-500    border-rose-500/30    bg-rose-500/15',
+      error_404: 'border-l-4 border-l-amber-500   border-amber-500/30   bg-amber-500/15',
+      opened:    'border-l-4 border-l-indigo-500  border-indigo-500/30  bg-indigo-500/10'
     };
     // Format waktu klik (WIB-aware)
     const fmtTime = dt => dt

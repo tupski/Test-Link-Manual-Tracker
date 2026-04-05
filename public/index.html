@@ -164,7 +164,7 @@
       </div>
     </div>
   </div>
-  <!-- Countdown ke test berikutnya -->
+  <!-- Countdown ke test berikutnya / info sesi aktif -->
   <div class="px-5 -mt-2 mb-3">
     <div class="glass rounded-2xl p-4 border border-indigo-500/20">
       <div class="flex items-center justify-between">
@@ -178,6 +178,19 @@
         </div>
       </div>
     </div>
+  </div>
+  <!-- Tombol Lanjutkan Test Link — muncul hanya saat sesi berlangsung -->
+  <div id="lanjutkan-wrap" class="hidden px-5 -mt-1 mb-3">
+    <button onclick="App.continueTestLink()"
+      class="w-full py-3.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 font-bold text-sm active:scale-95 transition-all flex items-center justify-between px-4">
+      <div class="flex items-center gap-2.5">
+        <span class="text-lg">▶️</span>
+        <span>Lanjutkan Test Link</span>
+      </div>
+      <div class="text-right">
+        <p class="text-emerald-200 font-mono text-xs" id="lanjutkan-countdown">--:--:--</p>
+      </div>
+    </button>
   </div>
   <!-- Kesiapan Test Link -->
   <div class="px-5 mb-3">

@@ -156,6 +156,7 @@ const App = (() => {
   // ── Countdown & Notification Scheduling ───────────────────
   let _countdownInterval = null;
   let _notifScheduled    = false;
+  let _activeSession     = null;   // nama sesi yang sedang aktif (untuk tombol Lanjutkan)
 
   /** Hitung sesi berikutnya berdasarkan jam WIB sekarang */
   const _getNextSession = (sessions) => {
@@ -184,18 +185,59 @@ const App = (() => {
     return { session: first, diffSecs, tomorrow: true };
   };
 
-  /** Update elemen countdown di beranda */
+  /** Update elemen countdown di beranda + tombol Lanjutkan Test Link */
   const _tickCountdown = (sessions) => {
-    const { session, diffSecs, tomorrow } = _getNextSession(sessions);
-    const h  = Math.floor(diffSecs / 3600);
-    const m  = Math.floor((diffSecs % 3600) / 60);
-    const s  = diffSecs % 60;
-    const lbl = document.getElementById('next-test-label');
-    const cd  = document.getElementById('next-test-countdown');
-    const sub = document.getElementById('next-test-sub');
-    if (lbl) lbl.textContent = `Sesi ${session.session_name.charAt(0).toUpperCase() + session.session_name.slice(1)} — ${UI.formatTime(session.start_hour, session.start_minute)} WIB`;
-    if (cd)  cd.textContent  = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-    if (sub) sub.textContent = tomorrow ? 'besok' : 'hari ini';
+    const SESS_DISPLAY_CD = { pagi: 'Pagi', siang: 'Sore', malam: 'Malam' };
+    // Cek apakah ada sesi yang sedang aktif saat ini
+    const wibNow  = new Date(Date.now() + 7 * 3600000);
+    const nowSecs = wibNow.getUTCHours() * 3600 + wibNow.getUTCMinutes() * 60 + wibNow.getUTCSeconds();
+    const activeSess = sessions.find(s => {
+      const t = UI.sessionTimer(s.start_hour, s.start_minute, s.normal_hours, s.max_hours);
+      return t.status === 'active' || t.status === 'overtime';
+    });
+
+    const lanjutkanWrap = document.getElementById('lanjutkan-wrap');
+
+    if (activeSess) {
+      // ── Sesi aktif: tampilkan info sesi + sisa waktu ───────────
+      _activeSession = activeSess.session_name;
+      const sessLabel = SESS_DISPLAY_CD[activeSess.session_name] || activeSess.session_name;
+      const timer     = UI.sessionTimer(activeSess.start_hour, activeSess.start_minute, activeSess.normal_hours, activeSess.max_hours);
+
+      const lbl = document.getElementById('next-test-label');
+      const cd  = document.getElementById('next-test-countdown');
+      const sub = document.getElementById('next-test-sub');
+      if (lbl) lbl.textContent = `Sesi ${sessLabel} sedang berlangsung`;
+      if (sub) sub.textContent = timer.label;
+
+      // Hitung sisa waktu hingga max_hours berakhir
+      const maxEndSecs = (activeSess.start_hour * 60 + (activeSess.start_minute || 0) + activeSess.max_hours * 60) * 60;
+      const remSecs    = Math.max(0, maxEndSecs - nowSecs);
+      const rh = Math.floor(remSecs / 3600);
+      const rm = Math.floor((remSecs % 3600) / 60);
+      const rs = remSecs % 60;
+      if (cd) cd.textContent = `${String(rh).padStart(2,'0')}:${String(rm).padStart(2,'0')}:${String(rs).padStart(2,'0')}`;
+
+      // Tampilkan tombol Lanjutkan, update countdown sisa sesi di dalamnya
+      if (lanjutkanWrap) lanjutkanWrap.classList.remove('hidden');
+      const cdEl = document.getElementById('lanjutkan-countdown');
+      if (cdEl) cdEl.textContent = `Sisa ${String(rh).padStart(2,'0')}:${String(rm).padStart(2,'0')}:${String(rs).padStart(2,'0')}`;
+    } else {
+      // ── Tidak ada sesi aktif: countdown ke sesi berikutnya ────
+      _activeSession = null;
+      if (lanjutkanWrap) lanjutkanWrap.classList.add('hidden');
+
+      const { session, diffSecs, tomorrow } = _getNextSession(sessions);
+      const h  = Math.floor(diffSecs / 3600);
+      const m  = Math.floor((diffSecs % 3600) / 60);
+      const s  = diffSecs % 60;
+      const lbl = document.getElementById('next-test-label');
+      const cd  = document.getElementById('next-test-countdown');
+      const sub = document.getElementById('next-test-sub');
+      if (lbl) lbl.textContent = `Sesi ${session.session_name.charAt(0).toUpperCase() + session.session_name.slice(1)} — ${UI.formatTime(session.start_hour, session.start_minute)} WIB`;
+      if (cd)  cd.textContent  = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+      if (sub) sub.textContent = tomorrow ? 'besok' : 'hari ini';
+    }
   };
 
   /** Mulai interval untuk clock + countdown */
@@ -376,6 +418,19 @@ const App = (() => {
     const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
     setEl('rd-os', os);
     setEl('rd-browser', browser);
+
+    // ── Coba UA-CH (User-Agent Client Hints) untuk versi Android yg akurat ──
+    // Chrome di Android membekukan UA dengan "Android 10" — UA-CH mengembalikan versi asli
+    if (navigator.userAgentData?.getHighEntropyValues) {
+      navigator.userAgentData.getHighEntropyValues(['platform', 'platformVersion'])
+        .then(data => {
+          if (data.platform === 'Android' && data.platformVersion) {
+            const major = data.platformVersion.split('.')[0];
+            setEl('rd-os', `Android ${major}`);
+          }
+        })
+        .catch(() => { /* fallback ke UA string biasa */ });
+    }
 
     // ── Kata kunci ISP Indonesia (partial match) ──────────────
     // Digunakan untuk konfirmasi koneksi berasal dari provider lokal
@@ -586,6 +641,33 @@ const App = (() => {
     finally { UI.loading(false); }
   };
 
+  /**
+   * Tampilkan detail link untuk 1 kategori tertentu — dipanggil dari card update link.
+   * Menampilkan daftar link terkini dalam kategori tersebut.
+   */
+  const showCategoryLinkChanges = async (catId, catName) => {
+    UI.loading(true);
+    try {
+      const links = await API.getLinks(catId);
+      const lines = links.map((l, i) => {
+        const domain = l.url.replace(/^https?:\/\//, '').split('/')[0];
+        return `<div class="flex items-center gap-2 py-1.5 border-b border-slate-800/50 last:border-0 text-xs">
+          <span class="text-slate-500 shrink-0 w-5 text-right">${i + 1}.</span>
+          <span class="font-mono text-slate-300 flex-1 truncate">${domain}</span>
+        </div>`;
+      }).join('');
+      await UI.confirm(
+        `🔗 Link: ${catName}`,
+        `<div class="max-h-60 overflow-y-auto pr-1 -mr-1 text-left">
+          <p class="text-[10px] text-slate-500 mb-2">${links.length} link aktif</p>
+          ${lines || '<p class="text-slate-500 text-xs text-center py-2">Belum ada link.</p>'}
+        </div>`,
+        'Tutup', 'bg-indigo-600', true
+      );
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
   /** Tampilkan detail perubahan link (semua kategori + info) */
   const showLinkChanges = async () => {
     UI.loading(true);
@@ -628,7 +710,86 @@ const App = (() => {
     finally { UI.loading(false); }
   };
 
+  /**
+   * Navigasi langsung ke link terakhir yang belum diklik saat sesi berlangsung.
+   * Dipanggil dari tombol "Lanjutkan Test Link" di beranda.
+   */
+  const continueTestLink = async () => {
+    // Pastikan ada sesi aktif
+    let sess = _activeSession;
+    if (!sess) {
+      try {
+        const sessions = await API.getSessions();
+        const active   = sessions.find(s => {
+          const t = UI.sessionTimer(s.start_hour, s.start_minute, s.normal_hours, s.max_hours);
+          return t.status === 'active' || t.status === 'overtime';
+        });
+        if (!active) return navToTestLink();
+        sess = active.session_name;
+      } catch { return navToTestLink(); }
+    }
+    state.currentSession = sess;
+    UI.loading(true);
+    try {
+      const today = UI.todayWIB();
+      const [cats, progress] = await Promise.all([
+        API.getCategories(),
+        API.getProgress(today, sess)
+      ]);
+      // Cari kategori pertama dengan link yang belum berstatus final
+      const finalStatuses = new Set(['normal', 'blocked', 'error_404']);
+      let targetCat = null;
+      for (const cat of cats) {
+        const total = Number(cat.link_count);
+        if (total === 0) continue;
+        const done = progress.filter(p => p.category_id === cat.id && finalStatuses.has(p.status)).length;
+        if (done < total) { targetCat = cat; break; }
+      }
+      if (!targetCat) {
+        // Semua selesai — buka halaman sesi
+        await Screens.renderCategories(sess);
+        showScreen('screen-categories');
+      } else {
+        state.currentCatId   = targetCat.id;
+        state.currentCatName = targetCat.name;
+        await Screens.renderLinks(targetCat.id, targetCat.name, sess);
+        showScreen('screen-links');
+      }
+    } catch (e) { UI.toast(e.message, 'error'); }
+    finally { UI.loading(false); }
+  };
+
   const openCategory = async (catId, catName) => {
+    // ── Cek apakah kategori sudah selesai → popup ──────────────
+    try {
+      const today    = UI.todayWIB();
+      const [cats, progress] = await Promise.all([
+        API.getCategories(),
+        API.getProgress(today, state.currentSession)
+      ]);
+      const cat = cats.find(c => c.id === Number(catId) || c.id === catId);
+      if (cat) {
+        const total = Number(cat.link_count);
+        const done  = progress.filter(p =>
+          (p.category_id === cat.id) &&
+          new Set(['normal','blocked','error_404']).has(p.status)
+        ).length;
+        if (total > 0 && done >= total) {
+          // Cari kategori berikutnya dalam tipe yang sama
+          const typeCats = cats.filter(c => c.type === cat.type);
+          const idx      = typeCats.findIndex(c => c.id === cat.id || c.id === Number(catId));
+          const nextCat  = idx >= 0 ? typeCats[idx + 1] : null;
+          const msg = nextCat
+            ? `Test link pada kategori <strong>${catName}</strong> sudah selesai. Apakah anda ingin melanjutkan ke kategori <strong>${nextCat.name}</strong>?`
+            : `Test link pada kategori <strong>${catName}</strong> sudah selesai.`;
+          const ok = await UI.confirm('✅ Kategori Selesai', msg,
+            nextCat ? 'Lanjut' : 'Tutup', 'bg-emerald-600', true);
+          if (nextCat && ok) { catId = nextCat.id; catName = nextCat.name; }
+          else return; // User pilih Tidak atau tidak ada nextCat
+        }
+      }
+    } catch { /* abaikan, tetap buka kategori */ }
+
     state.currentCatId   = catId;
     state.currentCatName = catName;
     UI.loading(true);
@@ -644,31 +805,73 @@ const App = (() => {
     const today = UI.todayWIB();
 
     // ── Peringatan jika di luar jam sesi ─────────────────────
-    // Cek timer sesi — jika waiting/expired, tampilkan konfirmasi
-    if (!progId && sessionName) {
+    if (sessionName) {
       try {
         const sessions = await API.getSessions();
         const sess     = sessions.find(s => s.session_name === sessionName);
         if (sess) {
-          const timer = UI.sessionTimer(sess.start_hour, sess.start_minute, sess.normal_hours, sess.max_hours);
+          const timer     = UI.sessionTimer(sess.start_hour, sess.start_minute, sess.normal_hours, sess.max_hours);
           const sessLabel = { pagi: 'Pagi', siang: 'Sore', malam: 'Malam' }[sessionName] || sessionName;
           if (timer.status === 'waiting') {
+            // Hitung berapa menit lagi sesi mulai
+            const wibNow   = new Date(Date.now() + 7 * 3600000);
+            const wibMin   = wibNow.getUTCHours() * 60 + wibNow.getUTCMinutes();
+            const startMin = sess.start_hour * 60 + (sess.start_minute || 0);
+            const diffMin  = startMin - wibMin;
+            const diffH    = Math.floor(diffMin / 60);
+            const diffM    = diffMin % 60;
+            const diffStr  = diffH > 0 ? `${diffH} Jam ${diffM} Menit` : `${diffMin} Menit`;
             const ok = await UI.confirm(
               '⏰ Sesi Belum Dimulai',
-              `Jam test link sesi ${sessLabel} belum dimulai. ${timer.label.replace('Mulai ', 'Mulai jam ')} WIB lagi.\n\n⚠️ Link yang dibuka tidak akan tercatat dalam sesi ini.`,
-              'Buka Tetap', 'bg-amber-600'
+              `<p>Jam test link sesi <strong>${sessLabel}</strong> belum dimulai. Test link berikutnya akan dimulai dalam <strong>${diffStr}</strong>.</p><p class="mt-2 text-amber-400 text-xs">⚠️ Link yang dibuka tidak akan tercatat saat sesi belum dimulai.</p>`,
+              'Tetap Buka', 'bg-amber-600'
             );
             if (!ok) return;
           } else if (timer.status === 'expired') {
             const ok = await UI.confirm(
               '⏰ Sesi Sudah Berakhir',
-              `Waktu test link sesi ${sessLabel} sudah habis.\n\n⚠️ Link yang dibuka tidak akan tercatat dalam sesi ini.`,
-              'Buka Tetap', 'bg-rose-600'
+              `<p>Waktu test link sesi <strong>${sessLabel}</strong> sudah habis.</p><p class="mt-2 text-rose-400 text-xs">⚠️ Link yang dibuka tidak akan tercatat dalam sesi ini.</p>`,
+              'Tetap Buka', 'bg-rose-600'
             );
             if (!ok) return;
           }
         }
-      } catch { /* abaikan error cek sesi, tetap buka link */ }
+      } catch { /* abaikan error cek sesi */ }
+    }
+
+    // ── Peringatan jika link sudah pernah dikunjungi ───────────
+    // Tampilkan hanya jika sudah ada progId dan statusnya final
+    if (progId) {
+      const suppressKey = 'lt_suppress_visited_warn';
+      if (localStorage.getItem(suppressKey) !== '1') {
+        // Cari status dari DOM card
+        const cardEl = document.querySelector(`[data-prog-link="${linkId}"]`);
+        const badge  = cardEl?.querySelector('[data-status-badge]')?.textContent || '';
+        const modal  = document.getElementById('modal-confirm');
+        const title  = document.getElementById('confirm-title');
+        const msg    = document.getElementById('confirm-msg');
+        const okBtn  = document.getElementById('confirm-ok');
+        const cancelBtn = document.getElementById('confirm-cancel');
+        if (modal && title && msg && okBtn && cancelBtn) {
+          title.textContent = '⚠️ Link Sudah Dikunjungi';
+          msg.innerHTML = `<p class="mb-3">Link ini sudah pernah dikunjungi ${badge ? '(<span class="font-bold">' + badge + '</span>)' : ''}. Tetap buka?</p>
+            <label class="flex items-center gap-2 cursor-pointer select-none">
+              <input type="checkbox" id="chk-suppress-visited" class="w-4 h-4 rounded accent-indigo-500"/>
+              <span class="text-xs text-slate-400">Jangan tampilkan lagi</span>
+            </label>`;
+          okBtn.className = 'flex-1 py-3 rounded-xl bg-amber-600 text-white font-bold';
+          okBtn.textContent = 'Tetap Buka';
+          cancelBtn.textContent = 'Batal';
+          modal.style.display = 'flex';
+          const proceed = await new Promise(resolve => {
+            okBtn.onclick     = () => { modal.style.display = 'none'; resolve(true); };
+            cancelBtn.onclick = () => { modal.style.display = 'none'; resolve(false); };
+          });
+          if (document.getElementById('chk-suppress-visited')?.checked)
+            localStorage.setItem(suppressKey, '1');
+          if (!proceed) return;
+        }
+      }
     }
 
     UI.loading(true);
@@ -694,16 +897,16 @@ const App = (() => {
 
     // ── Optimistic: update DOM langsung tanpa tunggu API ─────
     const statusMap = {
-      normal:    { icon: '✅', label: 'Normal',    cls: 'text-emerald-400', bg: 'border-emerald-500/20 bg-emerald-500/5' },
-      blocked:   { icon: '🚫', label: 'Diblokir',  cls: 'text-rose-400',    bg: 'border-rose-500/20 bg-rose-500/5' },
-      error_404: { icon: '❌', label: 'Error 404', cls: 'text-amber-400',   bg: 'border-amber-500/20 bg-amber-500/5' }
+      normal:    { icon: '✅', label: 'Normal',    cls: 'text-emerald-400', bg: 'border-l-4 border-l-emerald-500 border-emerald-500/30 bg-emerald-500/15' },
+      blocked:   { icon: '🚫', label: 'Diblokir',  cls: 'text-rose-400',    bg: 'border-l-4 border-l-rose-500    border-rose-500/30    bg-rose-500/15' },
+      error_404: { icon: '❌', label: 'Error 404', cls: 'text-amber-400',   bg: 'border-l-4 border-l-amber-500   border-amber-500/30   bg-amber-500/15' }
     };
     const sm = statusMap[status];
     if (sm) {
       const cardEl = document.querySelector(`[data-prog-link="${state.pendingLinkId}"]`);
       if (cardEl) {
-        // Update tampilan card ke style compact baru
-        cardEl.className = `glass rounded-xl p-2.5 flex items-center gap-2.5 cursor-pointer active:scale-[.98] transition-all ${sm.bg}`;
+        // Update tampilan card ke style compact baru (warna mencolok)
+        cardEl.className = `glass rounded-xl p-2.5 flex items-center gap-2.5 cursor-pointer active:scale-[.98] transition-all border ${sm.bg}`;
         cardEl.setAttribute('data-opened', '');
         // Update badge status di kanan
         const badge = cardEl.querySelector('[data-status-badge]');
@@ -962,11 +1165,7 @@ const App = (() => {
       UI.toast('Semua notifikasi ditandai dibaca ✅', 'success', 1500);
     } catch (e) { UI.toast(e.message, 'error'); }
   };
-  const navToSession = () => {
-    // Tampilkan pilihan sesi — buka dashboard lalu scroll ke sesi
-    showScreen('screen-dashboard');
-    loadDashboard();
-  };
+  // navToSession di-expose sebagai alias navToTestLink di return object
   const navToAdmin = () => { showScreen('screen-admin'); };
 
   // ── Admin Actions ──────────────────────────────────────────
@@ -1265,17 +1464,7 @@ const App = (() => {
     finally { UI.loading(false); }
   };
 
-  /**
-   * Helper: salam berdasarkan jam WIB.
-   * Pagi 05-10, Siang 11-14, Sore 15-18, Malam 19-04.
-   */
-  const _greet = () => {
-    const h = new Date(Date.now() + 7 * 3600000).getUTCHours();
-    if (h >= 5  && h < 11) return 'Selamat Pagi';
-    if (h >= 11 && h < 15) return 'Selamat Siang';
-    if (h >= 15 && h < 19) return 'Selamat Sore';
-    return 'Selamat Malam';
-  };
+  // _greet tidak digunakan — fungsi greeting sudah ada di _getWeatherTheme().greet
 
   /**
    * Reset SEMUA progress hari ini dengan konfirmasi math soal.
@@ -1541,10 +1730,10 @@ const App = (() => {
 
   return {
     login, logout, toggleAdminLogin, goBack, showScreen: _showScreenWithLoad,
-    openSession, openCategory, openLink, reportStatus, closeStatusModal, markAllDone, resetCategory,
+    openSession, openCategory, continueTestLink, openLink, reportStatus, closeStatusModal, markAllDone, resetCategory,
     navTo, navToTestLink, navToSession: navToTestLink, navToAdmin, navToProfile,
     navToPanduan, navToTentang, navToNotif, markAllNotifRead,
-    closeProfileDrawer, openSettings, deleteAccount, showLinkChanges,
+    closeProfileDrawer, openSettings, deleteAccount, showLinkChanges, showCategoryLinkChanges,
     saveUsername, saveProvider, resetAllProgress,
     requestNotification,
     adminAddCategory, adminRenameCategory, adminDeleteCategory, adminEditLinks, adminSaveLinks,

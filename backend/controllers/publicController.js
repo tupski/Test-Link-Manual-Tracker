@@ -179,13 +179,20 @@ const getMonitorData = async (req, res, next) => {
       progress_pct: totalLinks ? Math.round(vals.filter(p => finalS.has(p.status)).length / totalLinks * 100) : 0
     };
 
-    // ── Per tipe kategori ────────────────────────────────────
+    // ── Per tipe kategori — deduplicate per link_id agar tidak melebihi 100% ──
+    // Jika ada N user test link yang sama, cukup dihitung sekali per link.
     const by_type = {};
     ['otomatis','utama','manual'].forEach(type => {
-      const tc = cats.filter(c => c.type === type);
+      const tc  = cats.filter(c => c.type === type);
       const tot = tc.reduce((a, c) => a + Number(c.link_count), 0);
-      const done = (prog || []).filter(p => tc.some(c => c.id === p.category_id) && finalS.has(p.status)).length;
-      by_type[type] = { total: tot, done, pct: tot ? Math.round(done/tot*100) : 0 };
+      // Hitung LINK UNIK yang sudah berstatus final (bukan jumlah record user)
+      const doneSet = new Set(
+        (prog || [])
+          .filter(p => tc.some(c => c.id === p.category_id) && finalS.has(p.status))
+          .map(p => p.link_id)
+      );
+      const done = doneSet.size;
+      by_type[type] = { total: tot, done, pct: tot ? Math.min(100, Math.round(done / tot * 100)) : 0 };
     });
 
     // ── Per user ─────────────────────────────────────────────
@@ -270,9 +277,18 @@ const getMonitorData = async (req, res, next) => {
  */
 const getIpInfo = async (req, res, next) => {
   try {
-    // Ambil IP klien yang sesungguhnya (melalui proxy/Vercel)
-    const rawIp    = req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || req.ip || '';
+    // Ambil IP klien yang sesungguhnya
+    // Vercel menetapkan x-vercel-forwarded-for = IP asli klien (lebih reliable)
+    const rawIp    = req.headers['x-vercel-forwarded-for']
+                  || req.headers['x-forwarded-for']
+                  || req.headers['x-real-ip']
+                  || req.socket?.remoteAddress
+                  || '';
     const clientIp = rawIp.split(',')[0].trim().replace(/^::ffff:/, ''); // strip IPv4-mapped IPv6
+    if (!clientIp) {
+      // Tidak ada IP klien yang terdeteksi — kembalikan error deskriptif
+      return res.status(400).json({ success: false, error: 'IP klien tidak terdeteksi.' });
+    }
 
     const url = clientIp
       ? `https://ipwho.is/${clientIp}`

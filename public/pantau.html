@@ -15,6 +15,8 @@
   .live-dot{width:8px;height:8px;border-radius:50%;background:#22c55e;animation:pulse-dot 1.5s ease infinite}
   @keyframes spin{to{transform:rotate(360deg)}}
   .spinning{animation:spin 1s linear infinite}
+  @keyframes flash-update{0%{background:rgba(234,179,8,.22)}100%{background:transparent}}
+  .flash-yellow{animation:flash-update .8s ease-out 3}
   .stat-card{padding:1rem;display:flex;flex-direction:column;gap:4px}
   .stat-val{font-size:1.75rem;font-weight:900;line-height:1}
   .stat-lbl{font-size:.65rem;color:#94a3b8;text-transform:uppercase;letter-spacing:.05em}
@@ -38,6 +40,8 @@
   .cat-header{padding:.6rem .9rem;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03)}
   .section-title{font-size:.65rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.5rem}
   ::-webkit-scrollbar{width:3px}::-webkit-scrollbar-thumb{background:#334155;border-radius:2px}
+  .filter-btn{background:rgba(99,102,241,.1);border:1px solid rgba(99,102,241,.25);color:#94a3b8;border-radius:.5rem;padding:4px 10px;font-size:.68rem;font-weight:700;cursor:pointer;transition:all .15s}
+  .filter-btn.active{background:rgba(99,102,241,.3);border-color:rgba(99,102,241,.6);color:#c7d2fe}
 </style>
 </head>
 <body>
@@ -118,6 +122,19 @@
       <div id="cat-link-rows"></div>
     </div>
 
+    <!-- Filter sesi & status -->
+    <p class="section-title">Filter Aktivitas</p>
+    <div style="display:flex;flex-wrap:wrap;gap:.35rem;margin-bottom:1.25rem" id="filter-bar">
+      <button class="filter-btn active" data-filter-sess="" onclick="setFilterSess('')">Semua Sesi</button>
+      <button class="filter-btn" data-filter-sess="pagi"   onclick="setFilterSess('pagi')">🌅 Pagi</button>
+      <button class="filter-btn" data-filter-sess="siang"  onclick="setFilterSess('siang')">🌇 Sore</button>
+      <button class="filter-btn" data-filter-sess="malam"  onclick="setFilterSess('malam')">🌙 Malam</button>
+      <span style="width:1px;background:rgba(255,255,255,.08);margin:2px 4px"></span>
+      <button class="filter-btn" data-filter-stat=""          onclick="setFilterStat('')">Semua Status</button>
+      <button class="filter-btn" data-filter-stat="error_404" onclick="setFilterStat('error_404')">❌ Error</button>
+      <button class="filter-btn" data-filter-stat="blocked"   onclick="setFilterStat('blocked')">🚫 Diblokir</button>
+    </div>
+
     <!-- Aktivitas terbaru (paginasi) -->
     <p class="section-title" style="display:flex;align-items:center;justify-content:space-between">
       <span>Aktivitas Terbaru</span>
@@ -136,11 +153,53 @@ const API_BASE   = '/api';
 let pollInterval = null;
 let _lastData    = null;   // cache data terakhir untuk section link
 let _recentPage  = 1;      // halaman aktif paginasi recent activity
+let _filterSess  = '';     // filter sesi: '' | 'pagi' | 'siang' | 'malam'
+let _filterStat  = '';     // filter status: '' | 'error_404' | 'blocked'
+let _dataLoaded  = false;  // true setelah load pertama (untuk mencegah flash di init)
 const RECENT_PER_PAGE = 10; // jumlah item per halaman
 
 // ── Helpers ───────────────────────────────────────────────────────────
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const el  = id => document.getElementById(id);
+
+// Format waktu WIB dengan titik dua yang konsisten
+const fmt = dt => {
+  if (!dt) return '—';
+  const d = new Date(dt);
+  const wib = new Date(d.getTime() + 7 * 3600000);
+  const hh = String(wib.getUTCHours()).padStart(2,'0');
+  const mm = String(wib.getUTCMinutes()).padStart(2,'0');
+  const ss = String(wib.getUTCSeconds()).padStart(2,'0');
+  return `${hh}:${mm}:${ss} WIB`;
+};
+
+// ── Filter fungsi ─────────────────────────────────────────────────────
+function setFilterSess(sess) {
+  _filterSess = sess;
+  _recentPage = 1;
+  // Update tombol aktif
+  document.querySelectorAll('[data-filter-sess]').forEach(b => {
+    b.classList.toggle('active', b.dataset.filterSess === sess);
+  });
+  renderRecentPage();
+}
+function setFilterStat(stat) {
+  _filterStat = stat;
+  _recentPage = 1;
+  document.querySelectorAll('[data-filter-stat]').forEach(b => {
+    b.classList.toggle('active', b.dataset.filterStat === stat);
+  });
+  renderRecentPage();
+}
+
+// Flash kuning pada card/section yang datanya berubah
+function flashEl(id) {
+  const e = el(id);
+  if (!e) return;
+  e.classList.remove('flash-yellow');
+  void e.offsetWidth; // reflow untuk restart animasi
+  e.classList.add('flash-yellow');
+}
 
 // Toggle accordion Progress per Link
 function toggleLinkSection() {
@@ -166,10 +225,6 @@ const SESS_TAG = {
   overtime: '<span class="badge tag-overtime">⚡ Overtime</span>',
   expired:  '<span class="badge tag-expired">— Selesai</span>'
 };
-const fmt = dt => {
-  if (!dt) return '—';
-  return new Date(dt).toLocaleTimeString('id-ID',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-};
 const TYPE_META = {
   otomatis: { icon:'🤖', label:'Otomatis', color:'#818cf8' },
   utama:    { icon:'⭐', label:'Utama',    color:'#fbbf24' },
@@ -190,8 +245,10 @@ async function fetchData() {
     }
     const d = await r.json();
     if (!d.success) { showError(d.error || 'Gagal memuat data.'); return; }
-    _lastData = d;
-    render(d);
+    const wasLoaded = _dataLoaded;
+    _lastData   = d;
+    _dataLoaded = true;
+    render(d, wasLoaded);
     // Jika accordion link sudah terbuka, re-render juga
     if (el('link-section')?.style.display !== 'none' && d.cat_links) renderCatLinks(d.cat_links);
     el('err-box').style.display = 'none';
@@ -210,7 +267,7 @@ function showError(msg) {
   el('live-dot').style.background = '#ef4444';
 }
 
-function render(d) {
+function render(d, flash = false) {
   // Tanggal header
   const [y,m,day] = d.date.split('-');
   el('header-date').textContent = new Date(d.date+'T00:00:00').toLocaleDateString('id-ID',
@@ -272,6 +329,14 @@ function render(d) {
   // Aktivitas terbaru — simpan ke cache lalu render halaman pertama
   _recentPage = 1;
   renderRecentPage();
+
+  // Flash kuning pada section yang berubah (bukan saat load pertama)
+  if (flash) {
+    flashEl('sessions-row');
+    flashEl('by-type-rows');
+    flashEl('user-rows');
+    flashEl('recent-list');
+  }
 }
 
 // ── Render Progress per Kategori & Link ───────────────────────────────
@@ -304,7 +369,13 @@ function renderCatLinks(catLinks) {
 
 // ── Paginasi Recent Activity ──────────────────────────────────────────
 function renderRecentPage() {
-  const recent  = _lastData?.recent || [];
+  // Terapkan filter sesi dan status sebelum paginasi
+  const allRecent = _lastData?.recent || [];
+  const recent = allRecent.filter(r => {
+    if (_filterSess && r.session !== _filterSess) return false;
+    if (_filterStat && r.status  !== _filterStat) return false;
+    return true;
+  });
   const total   = recent.length;
   const pages   = Math.max(1, Math.ceil(total / RECENT_PER_PAGE));
   _recentPage   = Math.min(_recentPage, pages);
