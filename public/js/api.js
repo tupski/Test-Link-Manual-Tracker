@@ -52,11 +52,13 @@ const API = (() => {
     deleteLink:(id)               => req('DELETE',`/links/${id}`),
 
     // ── Progress ─────────────────────────────────────────────
-    getProgress:   (date, session) => req('GET', `/progress?date=${date}${session?`&session=${session}`:''}`),
-    markOpened:    (body)          => req('POST', '/progress', body),
-    updateStatus:  (id, status)    => req('PATCH',`/progress/${id}`, { status }),
-    markAllOpened: (body)          => req('POST', '/progress/mark-all', body),
-    resetProgress: (body)          => req('DELETE','/progress', body),
+    getProgress:    (date, session) => req('GET', `/progress?date=${date}${session?`&session=${session}`:''}`),
+    getHistory:     (days = 7)      => req('GET', `/progress/history?days=${days}`),
+    onSessionStart: (body)          => req('POST', '/progress/session-start', body),
+    markOpened:     (body)          => req('POST', '/progress', body),
+    updateStatus:   (id, status)    => req('PATCH',`/progress/${id}`, { status }),
+    markAllOpened:  (body)          => req('POST', '/progress/mark-all', body),
+    resetProgress:  (body)          => req('DELETE','/progress', body),
 
     // ── Config Sesi ──────────────────────────────────────────
     getSessions:   ()             => req('GET',  '/config/sessions'),

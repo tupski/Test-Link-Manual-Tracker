@@ -515,5 +515,95 @@ const Screens = (() => {
     return report.trim();
   };
 
-  return { renderDashboard, renderTestLink, renderCategories, renderLinks, generateReport };
+  // ── Riwayat Test Link ─────────────────────────────────────────────────────
+  let _histData  = [];
+  let _histSess  = '';   // filter sesi aktif
+
+  /**
+   * Render grafik bar chart sederhana dari data riwayat.
+   * Setiap bar mewakili 1 entri (tanggal+sesi) dengan persentase progress.
+   */
+  const _renderHistChart = (data) => {
+    const el = document.getElementById('hist-chart');
+    if (!el) return;
+    if (!data.length) { el.innerHTML = '<p class="text-center text-slate-500 text-sm py-4">Belum ada data.</p>'; return; }
+
+    const SESS_EMOJI = { pagi: '🌅', siang: '🌇', malam: '🌙' };
+    const SESS_COLOR = { pagi: '#6366f1', siang: '#f59e0b', malam: '#8b5cf6' };
+
+    const bars = data.slice(0, 14).map(d => { // max 14 bar
+      const color = SESS_COLOR[d.session] || '#6366f1';
+      const pct   = d.pct;
+      const emoji = SESS_EMOJI[d.session] || '🔵';
+      const shortDate = d.date.slice(5); // MM-DD
+      return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px;flex:1;min-width:28px">
+        <span style="font-size:.55rem;color:#94a3b8;font-weight:700">${pct}%</span>
+        <div style="width:100%;background:rgba(255,255,255,.07);border-radius:4px;height:80px;display:flex;align-items:flex-end">
+          <div style="width:100%;height:${Math.max(4, pct)}%;background:${color};border-radius:4px 4px 0 0;transition:height .3s"></div>
+        </div>
+        <span style="font-size:.6rem;color:#64748b">${emoji}</span>
+        <span style="font-size:.55rem;color:#475569;text-align:center;line-height:1.2">${shortDate}</span>
+      </div>`;
+    }).join('');
+
+    el.innerHTML = `<div style="display:flex;gap:6px;align-items:flex-end;height:130px;overflow-x:auto">${bars}</div>
+      <div style="display:flex;gap:12px;justify-content:center;margin-top:.75rem;font-size:.65rem;color:#64748b">
+        <span>🌅 Pagi</span><span>🌇 Sore</span><span>🌙 Malam</span>
+      </div>`;
+  };
+
+  /** Render daftar riwayat (cards per sesi). */
+  const _renderHistList = (data) => {
+    const el = document.getElementById('hist-list');
+    if (!el) return;
+    if (!data.length) { el.innerHTML = '<p class="text-center text-slate-500 text-sm py-8">Belum ada riwayat.</p>'; return; }
+
+    const SESS_LABEL = { pagi: '🌅 Pagi', siang: '🌇 Sore', malam: '🌙 Malam' };
+    el.innerHTML = data.map(d => {
+      const bar = `<div class="h-1.5 bg-slate-700/50 rounded-full overflow-hidden mt-2">
+        <div class="h-full rounded-full" style="width:${d.pct}%;background:${d.pct===100?'#10b981':'#6366f1'}"></div></div>`;
+      const badges = [
+        d.errors  ? `<span class="text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/25 rounded-md px-1.5 py-0.5">❌ ${d.errors} Error</span>` : '',
+        d.blocked ? `<span class="text-[10px] bg-rose-500/15 text-rose-400 border border-rose-500/25 rounded-md px-1.5 py-0.5">🚫 ${d.blocked} Blokir</span>` : ''
+      ].filter(Boolean).join('');
+      return `<div class="glass rounded-2xl p-4 mb-2">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-xs font-bold text-slate-300">${d.date}</p>
+            <p class="text-[11px] text-slate-500 mt-0.5">${SESS_LABEL[d.session] || d.session}</p>
+          </div>
+          <div class="text-right">
+            <p class="text-lg font-black ${d.pct===100?'text-emerald-400':'text-indigo-400'}">${d.pct}%</p>
+            <p class="text-[10px] text-slate-500">${d.done}/${d.total} link</p>
+          </div>
+        </div>
+        ${bar}
+        ${badges ? `<div class="flex gap-1.5 mt-2">${badges}</div>` : ''}
+      </div>`;
+    }).join('');
+  };
+
+  /**
+   * Render halaman riwayat test link (dipanggil saat masuk screen-history).
+   */
+  const renderHistory = async () => {
+    try {
+      _histData = await API.getHistory(7);
+      _applyHistFilter();
+    } catch (e) {
+      document.getElementById('hist-list').innerHTML  = `<p class="text-center text-rose-400 text-sm py-4">${e.message}</p>`;
+      document.getElementById('hist-chart').innerHTML = '';
+    }
+  };
+
+  /** Terapkan filter sesi ke grafik dan daftar. */
+  const _applyHistFilter = () => {
+    const filtered = _histSess
+      ? _histData.filter(d => d.session === _histSess)
+      : _histData;
+    _renderHistChart(filtered);
+    _renderHistList(filtered);
+  };
+
+  return { renderDashboard, renderTestLink, renderCategories, renderLinks, generateReport, renderHistory, setHistSess: (s) => { _histSess = s; _applyHistFilter(); } };
 })();

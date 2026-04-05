@@ -103,4 +103,100 @@ const resetProgress = async (req, res, next) => {
   } catch (err) { next(err); }
 };
 
-module.exports = { getProgress, markOpened, updateStatus, markAllOpened, resetProgress };
+/**
+ * GET /api/progress/history?days=7
+ * Riwayat progress user sendiri dalam N hari terakhir.
+ * Mengembalikan data dikelompokkan per tanggal dan sesi.
+ */
+const getHistory = async (req, res, next) => {
+  try {
+    const days = Math.min(Number(req.query.days) || 7, 30); // max 30 hari
+    // Hitung rentang tanggal WIB (YYYY-MM-DD)
+    const dates = [];
+    for (let i = 0; i < days; i++) {
+      const d = new Date(Date.now() + 7 * 3600000 - i * 86400000);
+      dates.push(d.toISOString().slice(0, 10));
+    }
+
+    const { data, error } = await supabase.from('progress')
+      .select('id, link_id, category_id, session_name, status, date, opened_at, updated_at')
+      .eq('user_id', req.user.id)
+      .in('date', dates)
+      .order('date', { ascending: false })
+      .order('session_name');
+
+    if (error) return next(error);
+
+    // Kelompokkan per tanggal + sesi
+    const grouped = {};
+    (data || []).forEach(p => {
+      const key = `${p.date}__${p.session_name}`;
+      if (!grouped[key]) grouped[key] = { date: p.date, session: p.session_name, items: [] };
+      grouped[key].items.push(p);
+    });
+
+    // Hitung summary per kelompok
+    const result = Object.values(grouped).map(g => {
+      const total  = g.items.length;
+      const done   = g.items.filter(p => ['normal','blocked','error_404'].includes(p.status)).length;
+      const errors = g.items.filter(p => p.status === 'error_404').length;
+      const blocked = g.items.filter(p => p.status === 'blocked').length;
+      return { date: g.date, session: g.session, total, done, errors, blocked, pct: total ? Math.round(done / total * 100) : 0 };
+    });
+
+    res.json(result);
+  } catch (err) { next(err); }
+};
+
+/**
+ * POST /api/progress/session-start
+ * Dipanggil saat sesi baru dimulai (dari frontend).
+ * Hapus progress user sendiri hari ini untuk sesi ini yang dibuat SEBELUM jam mulai sesi,
+ * lalu kirim notifikasi bahwa data lama dihapus.
+ */
+const onSessionStart = async (req, res, next) => {
+  try {
+    const { session_name, date } = req.body;
+    if (!session_name || !date)
+      return res.status(400).json({ error: 'session_name dan date wajib.' });
+
+    const userId = req.user.id;
+
+    // Cek apakah user punya data untuk sesi ini hari ini
+    const { data: existing, error: chkErr } = await supabase.from('progress')
+      .select('id', { count: 'exact' })
+      .eq('user_id', userId)
+      .eq('session_name', session_name)
+      .eq('date', date);
+
+    if (chkErr) return next(chkErr);
+
+    const count = existing?.length || 0;
+    if (count === 0) return res.json({ success: true, deleted: 0, notified: false });
+
+    // Hapus semua progress user untuk sesi ini hari ini
+    const { error: delErr } = await supabase.from('progress')
+      .delete()
+      .eq('user_id', userId)
+      .eq('session_name', session_name)
+      .eq('date', date);
+
+    if (delErr) return next(delErr);
+
+    // Buat notifikasi in-app untuk user
+    const SESS_LABEL = { pagi: 'Pagi', siang: 'Sore', malam: 'Malam' };
+    const label = SESS_LABEL[session_name] || session_name;
+    const { error: notifErr } = await supabase.from('notifications').insert({
+      title:     `🔄 Data Sesi ${label} Dihapus`,
+      message:   `Sesi ${label} baru saja dimulai. Data test link sebelumnya (${count} link) telah dihapus otomatis untuk memulai sesi yang bersih.`,
+      is_active: true,
+      created_at: new Date().toISOString()
+    });
+
+    if (notifErr) console.error('[onSessionStart] notif error:', notifErr.message);
+
+    res.json({ success: true, deleted: count, notified: !notifErr });
+  } catch (err) { next(err); }
+};
+
+module.exports = { getProgress, getHistory, markOpened, updateStatus, markAllOpened, resetProgress, onSessionStart };

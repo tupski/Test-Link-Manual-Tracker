@@ -13,7 +13,7 @@ const { requireAuth, requireAdmin } = require('../middleware/auth');
 const { login, me, updateMe }              = require('../controllers/authController');
 const { getCategories, createCategory, renameCategory, deleteCategory } = require('../controllers/categoriesController');
 const { getLinks, saveLinks, deleteLink }   = require('../controllers/linksController');
-const { getProgress, markOpened, updateStatus, markAllOpened, resetProgress } = require('../controllers/progressController');
+const { getProgress, getHistory, markOpened, updateStatus, markAllOpened, resetProgress, onSessionStart } = require('../controllers/progressController');
 const { getUsers, toggleResetAllowed, updateUser, deleteUser } = require('../controllers/usersController');
 const { getSessions, updateSession }        = require('../controllers/configController');
 const { getNotifications, getAllNotifications, createNotification, updateNotification, deleteNotification } = require('../controllers/notificationsController');
@@ -41,11 +41,13 @@ router.put('/categories/:id/links',  requireAuth, requireAdmin, saveLinks);
 router.delete('/links/:id',          requireAuth, requireAdmin, deleteLink);
 
 // ── Progress sesi ─────────────────────────────────────────────────────
-router.get('/progress',              requireAuth, getProgress);
-router.post('/progress/mark-all',    requireAuth, markAllOpened);
-router.post('/progress',             requireAuth, markOpened);
-router.patch('/progress/:id',        requireAuth, updateStatus);
-router.delete('/progress',           requireAuth, resetProgress);
+router.get('/progress',                requireAuth, getProgress);
+router.get('/progress/history',        requireAuth, getHistory);        // riwayat per hari
+router.post('/progress/session-start', requireAuth, onSessionStart);    // reset + notif saat sesi mulai
+router.post('/progress/mark-all',      requireAuth, markAllOpened);
+router.post('/progress',               requireAuth, markOpened);
+router.patch('/progress/:id',          requireAuth, updateStatus);
+router.delete('/progress',             requireAuth, resetProgress);
 
 // ── Users (admin) ─────────────────────────────────────────────────────
 router.get('/users',                          requireAuth, requireAdmin, getUsers);

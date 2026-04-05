@@ -58,17 +58,27 @@ const App = (() => {
    * Toggle form login admin — dipanggil oleh tombol di bawah halaman login.
    */
   const toggleAdminLogin = () => {
-    const section = document.getElementById('login-admin-section');
-    const btn     = document.getElementById('btn-admin-toggle');
+    // Admin mode hanya mengubah label & placeholder, field password tetap tampil untuk semua
+    const section  = document.getElementById('login-admin-section');
+    const btn      = document.getElementById('btn-admin-toggle');
+    const pwdLabel = document.getElementById('login-pwd-label');
+    const pwdHint  = document.getElementById('login-pwd-hint');
+    const pwdInput = document.getElementById('login-password');
     const isHidden = section.classList.contains('hidden');
     section.classList.toggle('hidden', !isHidden);
     if (isHidden) {
-      // Tampilkan form admin
+      // Masuk mode admin
       document.getElementById('login-username').value = 'admin';
+      if (pwdLabel) { pwdLabel.childNodes[0].textContent = 'Password Admin '; }
+      if (pwdHint)  { pwdHint.textContent = '(wajib diisi)'; }
+      if (pwdInput) { pwdInput.placeholder = 'Password admin...'; pwdInput.focus(); }
       if (btn) { btn.textContent = '✕ Tutup login admin'; btn.classList.add('text-indigo-400','border-indigo-500/50'); }
     } else {
-      // Sembunyikan form admin
+      // Kembali ke mode user
       document.getElementById('login-username').value = '';
+      if (pwdLabel) { pwdLabel.childNodes[0].textContent = 'Kata Sandi '; }
+      if (pwdHint)  { pwdHint.textContent = '(kosongkan jika tidak ada)'; }
+      if (pwdInput) { pwdInput.placeholder = 'Kata sandi akun...'; pwdInput.value = ''; }
       if (btn) { btn.textContent = '⚙️ Masuk sebagai Admin'; btn.classList.remove('text-indigo-400','border-indigo-500/50'); }
     }
   };
@@ -89,6 +99,11 @@ const App = (() => {
       afterLogin(false);
     } catch (e) {
       UI.toast(e.message, 'error');
+      // Jika error karena password diperlukan, fokuskan & highlight field password
+      if (e.message && (e.message.includes('kata sandi') || e.message.includes('Kata sandi'))) {
+        const pwdInput = document.getElementById('login-password');
+        if (pwdInput) { setTimeout(() => { pwdInput.focus(); pwdInput.select(); }, 300); }
+      }
     } finally { UI.loading(false); }
   };
 
@@ -201,6 +216,15 @@ const App = (() => {
     if (activeSess) {
       // ── Sesi aktif: tampilkan info sesi + sisa waktu ───────────
       _activeSession = activeSess.session_name;
+
+      // Trigger reset data sekali per sesi (simpan flag di sessionStorage)
+      const resetKey = `lt_sess_reset_${UI.todayWIB()}_${activeSess.session_name}`;
+      if (!sessionStorage.getItem(resetKey) && state.user) {
+        sessionStorage.setItem(resetKey, '1'); // tandai sudah dikirim (optimistic)
+        API.onSessionStart({ session_name: activeSess.session_name, date: UI.todayWIB() })
+          .then(r => { if (r?.deleted > 0) { _updateNotifBadge().catch(() => {}); } })
+          .catch(() => { sessionStorage.removeItem(resetKey); }); // rollback jika gagal
+      }
       const sessLabel = SESS_DISPLAY_CD[activeSess.session_name] || activeSess.session_name;
       const timer     = UI.sessionTimer(activeSess.start_hour, activeSess.start_minute, activeSess.normal_hours, activeSess.max_hours);
 
@@ -305,6 +329,54 @@ const App = (() => {
   };
 
   /**
+   * Tampilkan popup peringatan WiFi saat login.
+   * Tombol "Refresh" → re-cek koneksi. Tombol "Lanjutkan" → abaikan, masuk biasa.
+   */
+  const _checkWifiOnLogin = () => {
+    const conn   = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    const isWifi = conn?.type === 'wifi';
+    if (!isWifi || localStorage.getItem('lt_wifi_login_warned') === '1') return;
+
+    // Tampilkan modal kustom dengan tombol Refresh dan Lanjutkan
+    const MODAL_ID = 'modal-wifi-login';
+    let modal = document.getElementById(MODAL_ID);
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = MODAL_ID;
+      modal.style.cssText = 'position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.65);padding:1.25rem';
+      modal.innerHTML = `
+        <div class="glass rounded-3xl w-full max-w-sm p-6 slide-up" style="max-width:22rem">
+          <h3 class="text-lg font-bold mb-2">📶 Koneksi WiFi Terdeteksi</h3>
+          <p class="text-slate-400 text-sm mb-2">Anda sedang menggunakan <strong>WiFi</strong>. Hasil test link mungkin tidak akurat karena IP WiFi berbeda dari IP provider seluler Anda.</p>
+          <p class="text-amber-400 text-xs mb-4">Disarankan menggunakan <strong>data seluler</strong> agar IP provider terdeteksi dengan benar.</p>
+          <label class="flex items-center gap-2 cursor-pointer select-none mb-5">
+            <input type="checkbox" id="chk-wifi-login-suppress" class="w-4 h-4 accent-indigo-500" />
+            <span class="text-xs text-slate-400">Jangan tampilkan lagi</span>
+          </label>
+          <div class="flex gap-3">
+            <button id="wifi-login-refresh" class="flex-1 py-3 rounded-xl bg-indigo-600 text-white font-bold text-sm active:scale-95">🔄 Refresh</button>
+            <button id="wifi-login-lanjutkan" class="flex-1 py-3 rounded-xl bg-slate-700 text-slate-300 font-semibold text-sm active:scale-95">Lanjutkan</button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+    }
+    modal.style.display = 'flex';
+
+    const dismiss = () => {
+      if (document.getElementById('chk-wifi-login-suppress')?.checked)
+        localStorage.setItem('lt_wifi_login_warned', '1');
+      modal.style.display = 'none';
+    };
+
+    document.getElementById('wifi-login-lanjutkan').onclick = dismiss;
+    document.getElementById('wifi-login-refresh').onclick = () => {
+      dismiss();
+      // Reload halaman agar koneksi dicek ulang
+      window.location.reload();
+    };
+  };
+
+  /**
    * Dipanggil setelah login berhasil atau token valid saat init.
    * @param {boolean} restore - true jika restore dari localStorage (refresh halaman)
    */
@@ -317,6 +389,9 @@ const App = (() => {
 
     // Daftarkan service worker
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+
+    // Cek WiFi saat login pertama (bukan restore)
+    if (!restore) setTimeout(_checkWifiOnLogin, 600);
 
     // Mulai live clock + countdown
     _startLiveClock();
@@ -452,9 +527,55 @@ const App = (() => {
         .catch(() => { /* fallback ke UA string biasa */ });
     }
 
-    // ── Kata kunci ISP Indonesia (partial match) ──────────────
-    // Digunakan untuk konfirmasi koneksi berasal dari provider lokal
-    const INDO_ISP_RE = /telkom|telekomunikasi|xl axiata|xl |indosat|isat|hutchison|tri |smartfren|fren|axis |by\.?u|orbit|myrepublic|firstmedia|first media|cbn |biznet|oxygen|icon\+|mnc|linknet|maxis|iconnet|moratel|lintasarta|centrin|tkdn|gtl|net1|home credit|groovy|cbbn|max telecom/i;
+    // ── Daftar ISP Indonesia — nama PT resmi + nama dagang + alias ─────────────
+    // Digunakan untuk mendeteksi apakah koneksi berasal dari provider Indonesia lokal.
+    // Format: nama PT | nama dagang | produk/alias populer
+    const INDO_ISP_RE = new RegExp([
+      // ── TELKOM GROUP ──────────────────────────────────────────
+      'pt telekomunikasi indonesia', 'telekomunikasi indonesia', 'telkom indonesia',
+      'pt telkomsel', 'telkomsel', 'telkom',
+      'by\\.?u', 'byu',          // by.U (produk Telkomsel)
+      'orbit',                    // Telkom Orbit (fixed broadband)
+      'iconnet', 'icon\\+',       // Iconnet / ICON+ (jaringan serat Telkom)
+
+      // ── XL AXIATA GROUP ───────────────────────────────────────
+      'pt excelcomindo pratama', 'excelcomindo',
+      'pt xl axiata', 'xl axiata', '\\bxl\\b',
+      'pt axis telekom indonesia', 'axis telekom', '\\baxis\\b',  // Axis (akuisisi XL)
+
+      // ── INDOSAT OOREDOO HUTCHISON ─────────────────────────────
+      'pt indosat', 'indosat ooredoo hutchison', 'indosat ooredoo', 'indosat',
+      'isat', 'im3', 'im3 ooredoo', 'ooredoo',
+      'pt hutchison 3 indonesia', 'hutchison 3', 'hutchison cp',
+      '\\btri\\b', '3 indonesia', 'three indonesia',  // Tri / 3 (Hutchison)
+
+      // ── SMARTFREN ─────────────────────────────────────────────
+      'pt smartfren telecom', 'smartfren', '\\bfren\\b',
+
+      // ── MNC GROUP ─────────────────────────────────────────────
+      'pt media nusantara citra', 'mnc play', 'mnc vision', '\\bmnc\\b',
+
+      // ── FIXED BROADBAND INDEPENDEN ────────────────────────────
+      'pt myrepublic indonesia', 'myrepublic',
+      'pt link net', 'linknet', 'first media', 'pt firstmedia',
+      'pt cakrawala andalas semesta', '\\bcbn\\b',
+      'pt biznet networks', 'biznet',
+      'pt oxygen\\.id', 'oxygen',
+      'pt mora telematika', 'moratelindo', 'moratel',
+      'pt lintasarta', 'lintasarta',
+      'pt centrin online', 'centrin',
+
+      // ── LAINNYA ───────────────────────────────────────────────
+      'pt aplikanusa lintasarta', 'aplikanusa',
+      'pt net artajasa', 'artajasa',
+      'pt jaringanku', 'jaringanku',
+      'iforte',
+      'pt max telecom', 'max telecom',
+      'cbbn', 'groovy',
+      'net1 indonesia', '\\bnet1\\b',
+      'pt maxis', '\\bmaxis\\b',
+      'home credit indonesia',   // beberapa ISP bisnis
+    ].join('|'), 'i');
 
     // Fetch IP + info lokasi via backend proxy (/api/public/ipinfo → ipwho.is)
     // Menggunakan backend untuk menghindari CORS, rate-limit browser, dan blokir ekstensi
@@ -1774,6 +1895,27 @@ const App = (() => {
     login, logout, toggleAdminLogin, goBack, showScreen: _showScreenWithLoad,
     openSession, openCategory, continueTestLink, openLink, reportStatus, closeStatusModal, markAllDone, resetCategory,
     navTo, navToTestLink, navToSession: navToTestLink, navToAdmin, navToProfile,
+    navToHistory: async () => {
+      closeProfileDrawer();
+      UI.loading(true);
+      try { await Screens.renderHistory(); showScreen('screen-history'); }
+      catch (e) { UI.toast(e.message, 'error'); }
+      finally { UI.loading(false); }
+    },
+    histFilterSess: (sess) => {
+      // Update tombol aktif
+      document.querySelectorAll('.hist-sess-btn').forEach(b => {
+        const isActive = b.dataset.sess === sess;
+        b.classList.toggle('active', isActive);
+        b.classList.toggle('bg-indigo-600/30', isActive);
+        b.classList.toggle('border', isActive);
+        b.classList.toggle('border-indigo-500/40', isActive);
+        b.classList.toggle('text-indigo-300', isActive);
+        b.classList.toggle('bg-slate-800/50', !isActive);
+        b.classList.toggle('text-slate-400', !isActive);
+      });
+      Screens.setHistSess(sess);
+    },
     navToPanduan, navToTentang, navToNotif, markAllNotifRead,
     closeProfileDrawer, openSettings, deleteAccount, showLinkChanges, showCategoryLinkChanges,
     saveUsername, saveProvider, resetAllProgress,
