@@ -495,23 +495,32 @@ const App = (() => {
     setEl('rd-browser', browser);
 
     // ── Deteksi jenis koneksi (WiFi vs Data Seluler) ──────────────────
-    // Network Information API — didukung Chrome Android, tidak semua browser
+    // Network Information API — hanya didukung Chrome/Opera di Android.
+    // Safari (iOS/macOS) dan Firefox tidak mendukung API ini sama sekali.
     const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
     if (conn) {
       const buildNetworkLabel = () => {
-        const type = conn.type;          // 'wifi' | 'cellular' | 'ethernet' | 'bluetooth' | 'none' | 'other' | 'unknown'
+        const type = conn.type;          // 'wifi' | 'cellular' | 'ethernet' | 'none' | undefined
         const eff  = (conn.effectiveType || '').toUpperCase(); // '4G' | '3G' | '2G' | 'SLOW-2G'
         if (type === 'wifi')     return `📶 WiFi${eff ? ' (' + eff + ')' : ''}`;
         if (type === 'cellular') return `📱 Data Seluler${eff ? ' (' + eff + ')' : ''}`;
         if (type === 'ethernet') return `🔌 Kabel${eff ? ' (' + eff + ')' : ''}`;
         if (type === 'none')     return '❌ Tidak Ada Koneksi';
-        return eff ? `🔗 ${eff}` : '🔗 Online';
+        // Chrome desktop: type=undefined tapi effectiveType tersedia (biasanya '4g')
+        if (eff) return `🔗 Online (${eff})`;
+        return '🔗 Online';
       };
       setEl('rd-network', buildNetworkLabel());
       // Update label jika koneksi berubah (user pindah WiFi ↔ data)
       conn.addEventListener('change', () => setEl('rd-network', buildNetworkLabel()));
     } else {
-      setEl('rd-network', '— (browser tidak mendukung)');
+      // API tidak tersedia di browser ini (Safari, Firefox, dll.)
+      // Deteksi browser untuk pesan yang lebih relevan
+      const isSafari  = /Safari\//.test(ua) && !/Chrome\//.test(ua);
+      const isFirefox = /Firefox\//.test(ua);
+      if (isSafari)       setEl('rd-network', '— Safari tidak mendukung deteksi koneksi');
+      else if (isFirefox) setEl('rd-network', '— Firefox tidak mendukung deteksi koneksi');
+      else                setEl('rd-network', '— Gunakan Chrome di Android untuk deteksi koneksi');
     }
 
     // ── Coba UA-CH (User-Agent Client Hints) untuk versi Android yg akurat ──

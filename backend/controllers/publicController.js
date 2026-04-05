@@ -270,6 +270,70 @@ const getMonitorData = async (req, res, next) => {
 };
 
 /**
+ * Normalisasi nama ISP dari ip-api.com ke nama brand konsumen yang mudah dibaca.
+ *
+ * ip-api.com terkadang mengembalikan nama entitas registrasi APJII yang generik,
+ * misalnya "Indonesia Network Information Center" untuk blok IP XL/Indosat.
+ * Field `org` biasanya lebih akurat karena berisi "AS12345 PT NamaPerusahaan".
+ *
+ * Strategi:
+ * 1. Gabungkan isp + org, periksa terhadap pola nama PT / brand
+ * 2. Jika cocok, kembalikan nama brand konsumen
+ * 3. Jika tidak cocok, strip prefix AS-number dari org dan kembalikan sisanya
+ *
+ * @param {string|null} isp  - field `isp` dari ip-api.com
+ * @param {string|null} org  - field `org` dari ip-api.com (biasanya "AS12345 NamaOrg")
+ * @returns {string|null}    - nama ISP yang sudah dinormalisasi
+ */
+const _normalizeIsp = (isp, org) => {
+  // Gabungkan keduanya untuk pencocokan pola
+  const combined = `${isp || ''} ${org || ''}`.toLowerCase();
+
+  // ── Map ke nama brand konsumen ────────────────────────────────────────────
+  // Urutan penting: yang lebih spesifik di atas, lebih generik di bawah
+  if (/excelcomindo|xl axiata|\bxl\b(?! fiber)/.test(combined))     return 'XL Axiata';
+  if (/axis telekom|axis\s*(telecom|teleko|group)/.test(combined))  return 'AXIS (XL Group)';
+  if (/telkomsel/.test(combined))                                    return 'Telkomsel';
+  if (/by\.?u|byu/.test(combined))                                  return 'by.U (Telkomsel)';
+  if (/telekomunikasi indonesia|telkom indonesia|iconnet|icon\+/.test(combined)) return 'Telkom Indonesia / Iconnet';
+  if (/indosat ooredoo hutchison|indosat ooredoo|indosat/.test(combined)) return 'Indosat Ooredoo Hutchison';
+  if (/im3|isat/.test(combined))                                    return 'Indosat Ooredoo Hutchison';
+  if (/hutchison 3|hutchison cp|three indonesia|\btri\b/.test(combined)) return 'Tri (3)';
+  if (/smartfren|\bfren\b/.test(combined))                          return 'Smartfren';
+  if (/biznet/.test(combined))                                       return 'Biznet';
+  if (/firstmedia|first media/.test(combined))                      return 'FirstMedia';
+  if (/link net|linknet/.test(combined))                            return 'LinkNet (FirstMedia)';
+  if (/myrepublic/.test(combined))                                   return 'MyRepublic';
+  if (/\bcbn\b/.test(combined))                                     return 'CBN';
+  if (/mnc play|mnc vision/.test(combined))                         return 'MNC Play';
+  if (/moratel|moratelindo/.test(combined))                         return 'Moratel';
+  if (/lintasarta/.test(combined))                                   return 'Lintasarta';
+  if (/oxygen\.id|oxygen internet/.test(combined))                  return 'Oxygen.id';
+  if (/xl fiber|xl home/.test(combined))                            return 'XL Home Fiber';
+
+  // ── Nama generik APJII / NIC Indonesia — coba ekstrak dari org ──────────
+  // Daftar nama generik yang tidak informatif dari ip-api.com
+  const GENERIC = [
+    'indonesia network information center',
+    'apjii', 'nic indonesia', 'idnic',
+    'indonesia internet exchange', 'iix',
+    'asosiasi penyelenggara jasa internet indonesia',
+  ];
+  const isGeneric = GENERIC.some(g => (isp || '').toLowerCase().includes(g));
+
+  if (isGeneric && org) {
+    // Strip prefix "AS12345 " dari org dan kembalikan sisanya
+    const cleanOrg = org.replace(/^AS\d+\s+/i, '').trim();
+    // Coba sekali lagi cocokkan nama org yang sudah bersih
+    return _normalizeIsp(cleanOrg, null) || cleanOrg || isp || null;
+  }
+
+  // ── Fallback: strip AS prefix dari org, kembalikan apa adanya ────────────
+  if (org) return org.replace(/^AS\d+\s+/i, '').trim() || isp || null;
+  return isp || null;
+};
+
+/**
  * GET /api/public/ipinfo
  * Proxy server-side untuk mendapatkan info IP klien.
  * Memanggil ipwho.is dengan IP klien dari header X-Forwarded-For.
@@ -326,14 +390,14 @@ const getIpInfo = async (req, res, next) => {
             country_name: d2.country      || null,
             city:         d2.city         || null,
             region:       d2.region       || null,
-            org:          d2.org          || null
+            org:          _normalizeIsp(d2.org, d2.connection?.org || null)
           });
         }
       } catch { /* abaikan */ }
       return res.status(503).json({ success: false, error: 'Gagal mendapatkan data IP.' });
     }
 
-    // ip-api.com sukses — gunakan field `isp` (nama ISP bersih) sebagai org
+    // ip-api.com sukses — normalisasi nama ISP ke nama brand konsumen
     res.json({
       success:      true,
       ip:           data.query        || clientIp,
@@ -341,7 +405,7 @@ const getIpInfo = async (req, res, next) => {
       country_name: data.country      || null,
       city:         data.city         || null,
       region:       data.regionName   || null,
-      org:          data.isp          || data.org || null   // isp = nama ISP bersih (tanpa AS prefix)
+      org:          _normalizeIsp(data.isp, data.org)
     });
   } catch (err) { next(err); }
 };
